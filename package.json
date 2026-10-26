@@ -1,0 +1,28 @@
+{
+  "name": "archero-playable",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:generic": "vite --mode generic",
+    "check": "tsc --noEmit",
+    "build": "npm run check && npm run build:generic",
+    "build:generic": "vite build --mode generic && node scripts/package.mjs generic",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "pixi.js": "^8.8.1",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "@types/three": "^0.186.0",
+    "sharp": "^0.35.5",
+    "typescript": "~5.7.3",
+    "vite": "^6.2.0",
+    "vite-plugin-singlefile": "^2.3.0"
+  }
+}
