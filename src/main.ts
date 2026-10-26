@@ -5,6 +5,7 @@ import { onResize } from "./engine/resize.ts";
 import { WorldScene } from "./three/world.ts";
 import { createPlayer, movePlayer } from "./game/player.ts";
 import { keyboardDirection } from "./input/keyboard.ts";
+import { Joystick } from "./ui/joystick.ts";
 
 /**
  * Composition root. Two stacked canvases: Three.js world (#world) below,
@@ -26,8 +27,17 @@ async function boot(): Promise<void> {
   app.canvas.id = "ui";
   document.body.appendChild(app.canvas);
 
+  const joystick = new Joystick();
+  joystick.x = app.screen.width / 2;
+  joystick.y = app.screen.height - 150;
+
+  app.stage.addChild(joystick);
+
   onResize((w, h) => {
     world.resize(w, h);
+    app.canvas.width = w;
+    app.canvas.height = h;
+
     // TODO: re-position UI elements
   });
 
