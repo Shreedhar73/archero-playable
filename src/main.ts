@@ -30,6 +30,9 @@ async function boot(): Promise<void> {
   const joystick = new Joystick();
 
   app.stage.addChild(joystick);
+  app.stage.eventMode = "static";
+  app.stage.hitArea = app.screen;
+  joystick.listenOn(app.stage);
 
   onResize((w, h) => {
     world.resize(w, h);
