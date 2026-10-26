@@ -8,6 +8,7 @@
     "dev:generic": "vite --mode generic",
     "check": "tsc --noEmit",
     "assets": "node scripts/optimize-assets.mjs",
+    "assets:check": "node scripts/check-assets.mjs assets/archer.glb && node scripts/check-assets.mjs assets/enemy.glb",
     "build": "npm run check && npm run build:generic",
     "build:generic": "vite build --mode generic && node scripts/package.mjs generic",
     "preview": "vite preview"
