@@ -6,6 +6,7 @@ import { WorldScene } from "./three/world.ts";
 import { createPlayer, movePlayer } from "./game/player.ts";
 import { keyboardDirection } from "./input/keyboard.ts";
 import { Joystick } from "./ui/joystick.ts";
+import { clamp } from "./engine/math.ts";
 
 /**
  * Composition root. Two stacked canvases: Three.js world (#world) below,
@@ -36,8 +37,12 @@ async function boot(): Promise<void> {
 
   onResize((w, h) => {
     world.resize(w, h);
+    // Thumb-sized on a phone, not absurd on a desktop. Based on the shorter
+    // side, so rotating changes where the joystick is, never how big.
+    const scale = clamp(Math.min(w, h) / 800, 0.6, 1.2);
+    joystick.scale.set(scale);
     joystick.x = w / 2;
-    joystick.y = h - 150;
+    joystick.y = h - 110 * scale; // 110 is the distance from the bottom of the screen to the center of the joystick, in pixels
     // TODO: re-position UI elements
   });
 
