@@ -28,16 +28,13 @@ async function boot(): Promise<void> {
   document.body.appendChild(app.canvas);
 
   const joystick = new Joystick();
-  joystick.x = app.screen.width / 2;
-  joystick.y = app.screen.height - 150;
 
   app.stage.addChild(joystick);
 
   onResize((w, h) => {
     world.resize(w, h);
-    app.canvas.width = w;
-    app.canvas.height = h;
-
+    joystick.x = w / 2;
+    joystick.y = h - 150;
     // TODO: re-position UI elements
   });
 
