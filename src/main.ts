@@ -42,7 +42,7 @@ async function boot(): Promise<void> {
   });
 
   startLoop(app, (dt) => {
-    const dir = keyboardDirection();
+    const dir = joystick.dragging ? joystick.direction : keyboardDirection();
     movePlayer(player, dir.x, dir.z, dt);
     world.syncPlayer(player.x, player.z);
     world.render();
