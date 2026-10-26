@@ -7,4 +7,8 @@ export const STORE_URLS = {
   android: "https://play.google.com/store/apps/details?id=com.example.app",
 };
 
+export const PLAYER_SPEED = 3; // units per second
+
 export const ROOM_SIZE = 10; // units, square room
+
+export const PLAYER_RADIUS = 0.3; // units, for collision detection

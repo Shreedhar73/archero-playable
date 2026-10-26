@@ -3,6 +3,8 @@ import { adapter } from "@network";
 import { startLoop } from "./engine/loop.ts";
 import { onResize } from "./engine/resize.ts";
 import { WorldScene } from "./three/world.ts";
+import { createPlayer, movePlayer } from "./game/player.ts";
+import { keyboardDirection } from "./input/keyboard.ts";
 
 /**
  * Composition root. Two stacked canvases: Three.js world (#world) below,
@@ -14,6 +16,8 @@ import { WorldScene } from "./three/world.ts";
 async function boot(): Promise<void> {
   // The network decides when the ad may start (MRAID ready etc.).
   await adapter.ready();
+
+  const player = createPlayer();
 
   const world = new WorldScene();
 
@@ -27,8 +31,10 @@ async function boot(): Promise<void> {
     // TODO: re-position UI elements
   });
 
-  startLoop(app, () => {
-    // TODO: update game state, then let the renderers read it
+  startLoop(app, (dt) => {
+    const dir = keyboardDirection();
+    movePlayer(player, dir.x, dir.z, dt);
+    world.syncPlayer(player.x, player.z);
     world.render();
   });
 }

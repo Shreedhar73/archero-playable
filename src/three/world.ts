@@ -9,6 +9,7 @@ export class WorldScene {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
+  private readonly player: THREE.Mesh;
 
   constructor() {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -31,17 +32,22 @@ export class WorldScene {
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
 
-    const player = new THREE.Mesh(
+    this.player = new THREE.Mesh(
       new THREE.BoxGeometry(0.6, 1.8, 0.6),
       new THREE.MeshStandardMaterial({ color: 0xe0c060 }),
     );
-    player.position.y = 0.9;
-    this.scene.add(player);
+    this.player.position.y = 0.9;
+    this.scene.add(this.player);
 
     const grid = new THREE.GridHelper(ROOM_SIZE, ROOM_SIZE, 0x2f5a28, 0x2f5a28);
     grid.position.y = 0.01; // avoid z-fighting with floor
     this.scene.add(grid);
     // TODO: room/level geometry, directional light, entity meshes
+  }
+  /** Sync the player mesh position with the game state. */
+  syncPlayer(x: number, z: number): void {
+    this.player.position.x = x;
+    this.player.position.z = z;
   }
 
   resize(w: number, h: number): void {
