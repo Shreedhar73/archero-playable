@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { ROOM_SIZE } from "../config.ts";
 
 /**
  * Three.js world boot: renderer, camera, light. Owns the #world canvas,
@@ -22,6 +23,24 @@ export class WorldScene {
     this.camera.lookAt(0, 0, 0);
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x444466, 1.2));
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE),
+      new THREE.MeshStandardMaterial({ color: 0x4a7c3f }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    this.scene.add(floor);
+
+    const player = new THREE.Mesh(
+      new THREE.BoxGeometry(0.6, 1.8, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0xe0c060 }),
+    );
+    player.position.y = 0.9;
+    this.scene.add(player);
+
+    const grid = new THREE.GridHelper(ROOM_SIZE, ROOM_SIZE, 0x2f5a28, 0x2f5a28);
+    grid.position.y = 0.01; // avoid z-fighting with floor
+    this.scene.add(grid);
     // TODO: room/level geometry, directional light, entity meshes
   }
 
