@@ -5,15 +5,23 @@
  */
 
 import { PLAYER_SPEED, PLAYER_RADIUS, ROOM_SIZE } from "../config.ts";
+import { clamp } from "../engine/math.ts";
 
 export interface Player {
   /** Player, Height is constant so Y is not stored, x and z are stored for movement and collision detection. */
   x: number;
   z: number;
+  facing: number;
+
+  /** 0 at rest, 1 at full tilt. Drives the animation blend. Not a speed -
+   * PLAYER_SPEED is units per secondl this is a fraction of it
+   */
+
+  throttle: number;
 }
 
 export function createPlayer(): Player {
-  return { x: 0, z: 0 };
+  return { x: 0, z: 0, facing: 0, throttle: 0 };
 }
 
 /** Move the player based on input direction and delta time. */
@@ -23,9 +31,13 @@ export function movePlayer(
   dirZ: number,
   dt: number,
 ): void {
+  if (dirX !== 0 || dirZ !== 0) {
+    player.facing = Math.atan2(dirX, dirZ);
+  }
+  player.throttle = Math.hypot(dirX, dirZ);
   player.x += dirX * PLAYER_SPEED * dt;
   player.z += dirZ * PLAYER_SPEED * dt;
   const limit = ROOM_SIZE / 2 - PLAYER_RADIUS;
-  player.x = Math.max(-limit, Math.min(limit, player.x));
-  player.z = Math.max(-limit, Math.min(limit, player.z));
+  player.x = clamp(player.x, -limit, limit);
+  player.z = clamp(player.z, -limit, limit);
 }
