@@ -43,6 +43,8 @@ export default defineConfig(({ mode }) => {
   const network = NETWORKS.includes(mode) ? mode : NETWORKS[0];
   return {
     base: "./",
+    // Vite's default asset list has no .glb , so without this the import is a modules resolution error at build time
+    assetsInclude: ["**/*.glb"],
     // Every script, font, image and sound is inlined: ad networks forbid
     // runtime requests.
     plugins: [networkHead(network), viteSingleFile()],
