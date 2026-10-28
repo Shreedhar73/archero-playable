@@ -70,4 +70,8 @@ export const FIRE_INTERVAL = 0.4;
 export const FIRE_RANGE = 5;
 
 export const POINTS_PER_KILL = 10;
-export const POINTS_TARGET = 120;
+export const ENEMIES_TO_KILL = ENEMY_COUNT;
+
+/** Derived, so the two can never drift apart. */
+export const POINTS_TARGET = ENEMIES_TO_KILL * POINTS_PER_KILL;
+
