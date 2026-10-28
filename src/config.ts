@@ -27,3 +27,6 @@ export const ENEMY_SPEED = 1.8;
 
 /** Enemy radium. Help to stop enemy before as soon as it touches player */
 export const ENEMY_RADIUS = 0.35;
+
+/** Seconds between enemy spawns */
+export const SPAWN_INTERVAL = 1.5;
