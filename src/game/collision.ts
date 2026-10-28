@@ -2,7 +2,7 @@ import { clamp } from "../engine/math.ts";
 import type { Obstacle } from "./obstacles.ts";
 import type { Positioned } from "./room.ts";
 
-export function pushOurOfObstacles(
+export function pushOutOfObstacles(
   body: Positioned,
   radius: number,
   obstacles: Obstacle[],
