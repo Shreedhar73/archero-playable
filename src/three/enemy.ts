@@ -34,9 +34,11 @@ class EnemyView {
   /** Death is a one-shot, so it is started on the transition rather than kept
    *  playing at zero weight like the looping clips. */
   private wasDying = false;
+  private wasFlashing = false;
   /** SkeletonUtils.clone shares materials between clones, so tinting one
    *  enemy would tint all six. Each view needs its own copies. */
   private readonly materials: MeshStandardMaterial[] = [];
+  private readonly baseEmissive: number[] = [];
   private readonly baseColor: number[] = [];
   private lastKind: EnemyKind | null = null;
 
@@ -51,6 +53,7 @@ class EnemyView {
       const copy = node.material.clone();
       node.material = copy;
       this.materials.push(copy);
+      this.baseEmissive.push(copy.emissive.getHex());
       this.baseColor.push(copy.color.getHex());
     });
 
@@ -91,6 +94,19 @@ class EnemyView {
       this.death.reset().play();
     }
     this.wasDying = dying;
+
+    // A hit with no feedback reads as a miss, so damaged enemies glow for a
+    // frame or two. Only written on the transition: 19 meshes times 6 enemies
+    // is not worth touching every frame.
+    const flashing = !dying && enemy.hitFlash > 0;
+    if (flashing !== this.wasFlashing) {
+      for (let i = 0; i < this.materials.length; i++) {
+        this.materials[i].emissive.setHex(
+          flashing ? 0xff3a1a : this.baseEmissive[i],
+        );
+      }
+      this.wasFlashing = flashing;
+    }
 
     const punching = !dying && enemy.attacking;
     this.death.weight = dying ? 1 : 0;

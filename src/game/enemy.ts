@@ -9,6 +9,9 @@ import {
   PLAYER_RADIUS,
 } from "../config.ts";
 import { clampToRoom } from "./room.ts";
+
+/** Long enough to see at 60fps, short enough not to linger. */
+const HIT_FLASH_TIME = 0.12;
 import { pushOutOfObstacles } from "./collision.ts";
 import type { Obstacle } from "./obstacles.ts";
 import { flowAt, type Grid } from "./pathfind.ts";
@@ -37,6 +40,10 @@ export interface Enemy {
   attackCooldown: number;
   /** Drives the Punch clip. Set by combat, read by the renderer. */
   attacking: boolean;
+
+  /** Seconds of hit flash left. Feedback only — nothing reads it but the
+   *  renderer, and a hit with no feedback reads as a miss. */
+  hitFlash: number;
 }
 
 /** FIxed-size pool, build once at boot. Nothing is created or destroyed during play
@@ -56,6 +63,7 @@ export function createEnemies(): Enemy[] {
       dying: 0,
       attackCooldown: 0,
       attacking: false,
+      hitFlash: 0,
     });
   }
   return enemies;
@@ -79,6 +87,8 @@ export function updateEnemies(
   for (let i = 0; i < enemies.length; i++) {
     const enemy = enemies[i];
     if (!enemy.alive) continue;
+
+    if (enemy.hitFlash > 0) enemy.hitFlash -= dt;
 
     if (enemy.dying > 0) {
       // Corpses do not move, do not push and do not block: they are only
@@ -151,6 +161,7 @@ export function updateEnemies(
  */
 export function damageEnemy(enemy: Enemy, amount: number): boolean {
   if (!enemy.alive || enemy.dying > 0) return false;
+  enemy.hitFlash = HIT_FLASH_TIME;
   enemy.hp -= amount;
   if (enemy.hp > 0) return false;
   enemy.hp = 0;
