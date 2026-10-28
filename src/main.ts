@@ -133,9 +133,9 @@ async function boot(): Promise<void> {
       updateSpawner(spawner, enemies, dt);
       updateEnemies(enemies, player.x, player.z, dt, obstacles, grid);
       separateEnemies(enemies);
-      updateEnemyAttacks(enemies, player, dt);
+      updateEnemyAttacks(enemies, player, projectiles, dt);
       updateShooting(player, enemies, projectiles, dt);
-      addKills(state, updateProjectiles(projectiles, enemies, obstacles, dt));
+      addKills(state, updateProjectiles(projectiles, enemies, player, obstacles, dt));
       if (player.hp <= 0) endRun(state);
     } else if (!endCard.visible) {
       endCard.show(state.points, state.cleared);

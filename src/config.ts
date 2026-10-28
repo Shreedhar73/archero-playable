@@ -91,6 +91,10 @@ export const ENEMIES_TO_KILL = ENEMY_COUNT;
 /** Derived, so the two can never drift apart. */
 export const POINTS_TARGET = ENEMIES_TO_KILL * POINTS_PER_KILL;
 
+/** How far in front of the archer an arrow appears. Inside the body it reads
+ *  as the arrow materialising out of the chest. */
+export const ARROW_SPAWN_OFFSET = 0.45;
+
 /**
  * Seconds the tutorial waits before starting the game on its own.
  *
@@ -115,6 +119,10 @@ export const TUTORIAL_TIMEOUT = 3;
  * different because of how they move, not because of who outranges whom.
  */
 export const ENEMY_SHOOT_RANGE = 4.4;
+
+export const ENEMY_SHOT_INTERVAL = 1.9;
+export const ENEMY_ARROW_SPEED = 7;
+export const ENEMY_ARROW_DAMAGE = 5;
 
 /**
  * How far inside its firing range an archer tolerates the player before

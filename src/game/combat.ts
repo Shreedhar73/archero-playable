@@ -1,4 +1,7 @@
 import {
+  ARROW_SPAWN_OFFSET,
+  ENEMY_SHOOT_RANGE,
+  ENEMY_SHOT_INTERVAL,
   ENEMY_ATTACK_INTERVAL,
   ENEMY_DAMAGE,
   ENEMY_RADIUS,
@@ -46,17 +49,28 @@ export function updateShooting(
   // Facing follows the shot while standing: an archer firing sideways reads
   // as a bug even when the arrow goes the right way.
   player.facing = Math.atan2(dirX, dirZ);
-  fireProjectile(projectiles, player.x, player.z, dirX, dirZ);
+  fireProjectile(
+    projectiles,
+    player.x + dirX * ARROW_SPAWN_OFFSET,
+    player.z + dirZ * ARROW_SPAWN_OFFSET,
+    dirX,
+    dirZ,
+    false,
+  );
   player.fireCooldown = FIRE_INTERVAL;
 }
 
 /**
- * Melee. An enemy in reach swings on its own cooldown; out of reach, the
- * cooldown is reset so stepping away and back does not grant a free hit.
+ * Enemy offence, both kinds.
+ *
+ * Melee swings when touching; archers hold at ENEMY_SHOOT_RANGE and fire.
+ * Out of their own range either way, the cooldown resets, so stepping away
+ * and back does not grant a free hit.
  */
 export function updateEnemyAttacks(
   enemies: Enemy[],
   player: Player,
+  projectiles: Projectile[],
   dt: number,
 ): void {
   for (let i = 0; i < enemies.length; i++) {
@@ -65,17 +79,39 @@ export function updateEnemyAttacks(
 
     const dx = player.x - enemy.x;
     const dz = player.z - enemy.z;
-    const inReach = dx * dx + dz * dz <= MELEE_REACH * MELEE_REACH;
+    const squared = dx * dx + dz * dz;
+    const reach = enemy.kind === "archer" ? ENEMY_SHOOT_RANGE : MELEE_REACH;
 
-    if (!inReach) {
+    if (squared > reach * reach) {
       enemy.attacking = false;
-      enemy.attackCooldown = ENEMY_ATTACK_INTERVAL;
+      enemy.attackCooldown =
+        enemy.kind === "archer" ? ENEMY_SHOT_INTERVAL : ENEMY_ATTACK_INTERVAL;
       continue;
     }
 
     enemy.attacking = true;
     enemy.attackCooldown -= dt;
-    if (enemy.attackCooldown <= 0) {
+
+    // An archer that has stopped walking would otherwise keep whatever facing
+    // it arrived with, and shoot sideways.
+    const distance = Math.sqrt(squared);
+    const dirX = distance > 0 ? dx / distance : 0;
+    const dirZ = distance > 0 ? dz / distance : 1;
+    enemy.facing = Math.atan2(dirX, dirZ);
+
+    if (enemy.attackCooldown > 0) continue;
+
+    if (enemy.kind === "archer") {
+      fireProjectile(
+        projectiles,
+        enemy.x + dirX * ARROW_SPAWN_OFFSET,
+        enemy.z + dirZ * ARROW_SPAWN_OFFSET,
+        dirX,
+        dirZ,
+        true,
+      );
+      enemy.attackCooldown = ENEMY_SHOT_INTERVAL;
+    } else {
       player.hp = Math.max(0, player.hp - ENEMY_DAMAGE);
       enemy.attackCooldown = ENEMY_ATTACK_INTERVAL;
     }
