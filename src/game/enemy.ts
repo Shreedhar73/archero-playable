@@ -5,7 +5,7 @@ import {
   PLAYER_RADIUS,
 } from "../config.ts";
 
-/** One enemy. Exists for the whole sessison; 'alive' decides if it is simulated  */
+/** One enemy. Exists for the whole session; 'alive' decides if it is simulated  */
 export interface Enemy {
   x: number;
   z: number;

@@ -6,7 +6,7 @@ import { joystickVector } from "../input/joystick.ts";
 const RADIUS = 70;
 
 /**
- * Virtual joystick. Pixi display Ovjects and its pointer handling.
+ * Virtual joystick. Pixi display Objects and its pointer handling.
  * Gives game direction vector
  */
 export class Joystick extends Container {
