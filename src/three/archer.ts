@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { action } from "./clips";
+import { action } from "./clips.ts";
 /** The archer's view: Loaded model + animation state belonging to this on instance */
 
 export class ArcherView {
