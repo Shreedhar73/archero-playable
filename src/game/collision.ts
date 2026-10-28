@@ -35,3 +35,23 @@ export function pushOutOfObstacles(
     }
   }
 }
+
+/**
+ * Whether a circular body overlaps any box. Same closest-point test as the
+ * push-out, but it only answers yes or no — projectiles are destroyed on
+ * contact rather than slid along a surface.
+ */
+export function overlapsObstacle(
+  x: number,
+  z: number,
+  radius: number,
+  obstacles: Obstacle[],
+): boolean {
+  for (let i = 0; i < obstacles.length; i++) {
+    const box = obstacles[i];
+    const closestX = clamp(x, box.x - box.halfX, box.x + box.halfX);
+    const closestZ = clamp(z, box.z - box.halfZ, box.z + box.halfZ);
+    if (Math.hypot(x - closestX, z - closestZ) < radius) return true;
+  }
+  return false;
+}
