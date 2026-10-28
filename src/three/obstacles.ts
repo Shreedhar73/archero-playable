@@ -1,5 +1,5 @@
 import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
-import type { Obstacle } from "../game/obstacles";
+import type { Obstacle } from "../game/obstacles.ts";
 
 /** Create height. Visual only collision is 2d so height doesnt impact */
 const HEIGHT = 0.9;
