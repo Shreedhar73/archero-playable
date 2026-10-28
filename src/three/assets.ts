@@ -18,9 +18,12 @@ import arrowUrl from "../../assets/arrow.glb";
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
 /**
- * Loads the archer: Erika with Idle, Run, Shoot and Death retargeted onto her
- * rig by `scripts/build-playable.mjs`. Awaited during boot, so every clip is
- * resident before the first frame.
+ * Loads the archer: Erika with Idle, Run, Shoot and Death, merged onto her
+ * rig by `scripts/fbx-merge.mjs` and named by `scripts/build-archer.mjs`.
+ * Awaited during boot, so every clip is resident before the first frame.
+ *
+ * The enemy archers clone this same GLTF — see `EnemyViews` — so a clip
+ * dropped here is dropped for both sides.
  */
 export function loadArcher(): Promise<GLTF> {
   return loader.loadAsync(archerUrl);

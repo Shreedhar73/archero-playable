@@ -92,7 +92,7 @@ export class WorldScene {
     this.arrows = new ArrowViews(assets.arrow);
     this.scene.add(this.arrows.root);
 
-    this.enemies = new EnemyViews(assets.enemy);
+    this.enemies = new EnemyViews(assets.enemy, assets.archer);
     this.castOnly(this.enemies.root);
     this.scene.add(this.enemies.root);
   }

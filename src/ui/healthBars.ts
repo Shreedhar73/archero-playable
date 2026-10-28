@@ -1,6 +1,13 @@
 import { Container, Graphics } from "pixi.js";
 import { clamp } from "../engine/math.ts";
 
+/** Friend or foe at a glance, without reading the number. The player's bar
+ *  also warns by turning red when low; an enemy bar is red from the start, so
+ *  it has nothing left to warn with and does not need to. */
+const FRIENDLY = 0x5fd04a;
+const FRIENDLY_LOW = 0xe0503a;
+const HOSTILE = 0xe8452f;
+
 const WIDTH = 44;
 const HEIGHT = 6;
 
@@ -46,6 +53,7 @@ export class HealthBars extends Container {
     y: number,
     fraction: number,
     show: boolean,
+    hostile: boolean,
   ): void {
     const bar = this.bars[index];
     bar.visible = show;
@@ -69,6 +77,8 @@ export class HealthBars extends Container {
       .roundRect(0, 0, WIDTH, HEIGHT, HEIGHT / 2)
       .fill({ color: 0x000000, alpha: 0.5 })
       .roundRect(0, 0, WIDTH * fraction, HEIGHT, HEIGHT / 2)
-      .fill({ color: fraction > 0.3 ? 0x5fd04a : 0xe0503a });
+      .fill({
+        color: hostile ? HOSTILE : fraction > 0.3 ? FRIENDLY : FRIENDLY_LOW,
+      });
   }
 }

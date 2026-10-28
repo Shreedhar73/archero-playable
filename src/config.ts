@@ -29,6 +29,9 @@ export const ENEMY_KINDS = [
   "melee",
   "archer",
   "archer",
+  "archer",
+  "melee",
+  "archer",
 ] as const;
 
 /**
@@ -62,7 +65,7 @@ export const PLAYER_HP = 100;
  *  instant — long enough for the hit reaction to read. */
 export const ENEMY_HP = 30;
 
-export const ENEMY_DAMAGE = 4;
+export const ENEMY_DAMAGE = 3;
 
 /** Seconds between melee swings, so standing in a crowd is lethal but not
  *  instantly so. */
@@ -73,7 +76,7 @@ export const ENEMY_ATTACK_INTERVAL = 1.4;
 export const ENEMY_DEATH_TIME = 1.1;
 
 export const ARROW_SPEED = 11;
-export const ARROW_DAMAGE = 10;
+export const ARROW_DAMAGE = 15;
 export const ARROW_RADIUS = 0.12;
 
 /** Seconds before an arrow despawns, in case it somehow misses everything. */
@@ -82,7 +85,7 @@ export const ARROW_LIFE = 2;
 /** Arrows in flight at once. Fire rate times life plus headroom. */
 export const PROJECTILE_COUNT = 24;
 
-export const FIRE_INTERVAL = 0.4;
+export const FIRE_INTERVAL = 0.8;
 export const FIRE_RANGE = 5;
 
 /**
@@ -112,7 +115,6 @@ export const ARROW_SPAWN_OFFSET = 0.45;
  */
 export const TUTORIAL_TIMEOUT = 3;
 
-
 /**
  * The distance an archer enemy tries to hold.
  *
@@ -127,7 +129,7 @@ export const TUTORIAL_TIMEOUT = 3;
  */
 export const ENEMY_SHOOT_RANGE = 4.4;
 
-export const ENEMY_SHOT_INTERVAL = 1.9;
+export const ENEMY_SHOT_INTERVAL = 2.5;
 export const ENEMY_ARROW_SPEED = 7;
 export const ENEMY_ARROW_DAMAGE = 5;
 
@@ -142,3 +144,17 @@ export const ENEMY_KITE_BAND = 0.78;
 /** Retreating is slower than advancing — walking backwards always is, and it
  *  gives the player a way to close the gap. */
 export const ENEMY_BACKPEDAL = 0.8;
+
+/**
+ * Enemy archers reuse the player's GLB: it already carries a bow, a Shoot
+ * clip and a Death clip, so they cost no extra bundle bytes at all.
+ *
+ * Sharing a model means sharing a silhouette, so the tint is doing all the
+ * work of telling friend from foe. A gentle 0.55 mix was not enough — at this
+ * camera distance both read as "dark figure with a bow" — hence a strong mix
+ * toward a saturated red. Scale helps a little, colour does the rest.
+ */
+export const ENEMY_ARCHER_SCALE = 0.82;
+export const ENEMY_ARCHER_TINT = 0xff3b2e;
+
+export const ENEMY_ARCHER_TINT_MIX = 0.82;

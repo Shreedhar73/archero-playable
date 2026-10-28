@@ -12,9 +12,9 @@ const DEATH_FADE = 0.15;
  * The archer's view: loaded model plus the animation state belonging to this
  * one instance.
  *
- * The bow is part of the model — baked onto the hand bone by
- * `scripts/build-playable.mjs` from Mixamo's own with-bow export — so nothing
- * here attaches a prop or carries a pose constant for one.
+ * The bow is part of the model — it comes attached to the hand bone in
+ * Mixamo's own with-bow export, which `scripts/fbx-merge.mjs` keeps intact —
+ * so nothing here attaches a prop or carries a pose constant for one.
  */
 export class ArcherView {
   readonly root: THREE.Object3D;

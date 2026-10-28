@@ -54,8 +54,9 @@ function nameBefore(data, offset) {
   return basename(matches[matches.length - 1][0].replace(/\\/g, "/"));
 }
 
-// Run directly to dump every embedded texture; fbx-to-glb.mjs imports
-// extractTextures() to pull out the one the archer build needs.
+// Standalone since the merge moved into headless Chromium: fbx-merge.mjs gets
+// the textures through FBXLoader's blob URLs and no longer needs extracting.
+// Kept because it is the only way to see what a Mixamo FBX actually carries.
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [input, outDir] = process.argv.slice(2);
   if (!input || !outDir) {
