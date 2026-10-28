@@ -7,6 +7,7 @@ import type { Enemy } from "../game/enemy.ts";
 import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
 import { frameRoom } from "./camera.ts";
 import { checkerTexture } from "./textures.ts";
+import { Scenery } from "./scenery.ts";
 import type { Obstacle } from "../game/obstacles.ts";
 import { ObstacleViews } from "./obstacles.ts";
 
@@ -43,6 +44,7 @@ export class WorldScene {
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x444466, 1.2));
 
     this.addSurround();
+    this.scene.add(new Scenery().root);
     this.addFloor();
     this.addWalls();
     this.scene.add(new ObstacleViews(obstacles).root);
