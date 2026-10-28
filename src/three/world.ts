@@ -14,6 +14,17 @@ import type { Projectile } from "../game/projectiles.ts";
 import type { Obstacle } from "../game/obstacles.ts";
 import { ObstacleViews } from "./obstacles.ts";
 
+/**
+ * Everything the scene needs loaded before it can be built. An options object
+ * rather than five positional arguments: four of them are GLTFs, so the
+ * compiler could not tell them apart if they were swapped.
+ */
+export interface WorldAssets {
+  archer: GLTF;
+  enemy: GLTF;
+  arrow: GLTF;
+}
+
 /** A world point in overlay pixels, plus whether it is in front of the camera. */
 export interface Projected {
   x: number;
@@ -38,12 +49,12 @@ export class WorldScene {
   readonly renderer: THREE.WebGLRenderer;
   private readonly archer: ArcherView;
   private readonly enemies: EnemyViews;
-  private readonly arrows = new ArrowViews();
+  private readonly arrows: ArrowViews;
   private screenW = 1;
   private screenH = 1;
   private readonly point = new THREE.Vector3();
 
-  constructor(archerGltf: GLTF, enemyGltf: GLTF, obstacles: Obstacle[]) {
+  constructor(assets: WorldAssets, obstacles: Obstacle[]) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.domElement.id = "world";
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -73,13 +84,14 @@ export class WorldScene {
     this.addWalls();
     this.scene.add(new ObstacleViews(obstacles).root);
 
-    this.archer = new ArcherView(archerGltf);
+    this.archer = new ArcherView(assets.archer);
     this.castOnly(this.archer.root);
     this.scene.add(this.archer.root);
 
+    this.arrows = new ArrowViews(assets.arrow);
     this.scene.add(this.arrows.root);
 
-    this.enemies = new EnemyViews(enemyGltf);
+    this.enemies = new EnemyViews(assets.enemy);
     this.castOnly(this.enemies.root);
     this.scene.add(this.enemies.root);
   }
