@@ -5,6 +5,8 @@ import {
   PLAYER_RADIUS,
 } from "../config.ts";
 import { clampToRoom } from "./room.ts";
+import { pushOutOfObstacles } from "./collision.ts";
+import type { Obstacle } from "./obstacles.ts";
 
 /** One enemy. Exists for the whole session; 'alive' decides if it is simulated  */
 export interface Enemy {
@@ -32,13 +34,17 @@ export function createEnemies(): Enemy[] {
   return enemies;
 }
 
-/** Hanldes enemy movement */
-
+/**
+ * Straight-line seek: aim at the player, step, then let collision correct the
+ * position. Nothing here knows the room's shape, so an enemy that walks into a
+ * crate keeps choosing the same direction into it.
+ */
 export function updateEnemies(
   enemies: Enemy[],
   targetX: number,
   targetZ: number,
   dt: number,
+  obstacles: Obstacle[],
 ): void {
   const contact = ENEMY_RADIUS + PLAYER_RADIUS;
   for (let i = 0; i < enemies.length; i++) {
@@ -59,6 +65,7 @@ export function updateEnemies(
     enemy.throttle = 1;
     enemy.x += dirX * ENEMY_SPEED * dt;
     enemy.z += dirZ * ENEMY_SPEED * dt;
+    pushOutOfObstacles(enemy, ENEMY_RADIUS, obstacles);
     clampToRoom(enemy, ENEMY_RADIUS);
   }
 }

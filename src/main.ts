@@ -58,7 +58,7 @@ async function boot(): Promise<void> {
     const dir = joystick.dragging ? joystick.direction : keyboardDirection();
     movePlayer(player, dir.x, dir.z, dt, obstacles);
     updateSpawner(spawner, enemies, dt);
-    updateEnemies(enemies, player.x, player.z, dt);
+    updateEnemies(enemies, player.x, player.z, dt, obstacles);
     separateEnemies(enemies);
     world.syncPlayer(player.x, player.z, player.facing, player.throttle);
     for (let i = 0; i < enemies.length; i++) {
