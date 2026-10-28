@@ -9,7 +9,8 @@ export const STORE_URLS = {
 
 export const PLAYER_SPEED = 3; // units per second
 
-/**Room is tall rectangle */
+/** Room footprint. Taller than wide, as in the reference (~1:1.3) — enough to
+ *  read as an Archero arena, shallow enough to still frame in landscape. */
 export const ROOM_WIDTH = 9;
 export const ROOM_DEPTH = 12;
 
