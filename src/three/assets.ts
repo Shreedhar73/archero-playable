@@ -4,10 +4,17 @@ import {
   type GLTF,
   GLTFLoader,
 } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import archerUrl from "../../assets/archer.glb";
 import enemyURL from "../../assets/enemy.glb";
 
-const loader = new GLTFLoader();
+/**
+ * Every model is EXT_meshopt_compression, so the decoder is not optional —
+ * GLTFLoader throws without it. It is one 29 KB module with its wasm embedded
+ * as base64, which is why meshopt won over Draco here: Draco's decoder is 250
+ * KB of wasm and wrapper, more than the geometry it would have saved.
+ */
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
 /** Loads the archer . Awaited during boot, so are preloaded when game starts */
 export function loadArcher(): Promise<GLTF> {
