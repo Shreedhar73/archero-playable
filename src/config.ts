@@ -10,8 +10,8 @@ export const STORE_URLS = {
 export const PLAYER_SPEED = 3; // units per second
 
 /**Room is tall rectangle */
-export const ROOM_WIDTH = 12;
-export const ROOM_DEPTH = 13;
+export const ROOM_WIDTH = 9;
+export const ROOM_DEPTH = 12;
 
 export const PLAYER_RADIUS = 0.3; // units, for collision detection
 
@@ -19,7 +19,7 @@ export const PLAYER_RADIUS = 0.3; // units, for collision detection
  * so this is a frame-time budget, not a difficuly or performance dial
  */
 
-export const ENEMY_COUNT = 6;
+export const ENEMY_COUNT = 3;
 
 /** Ememy height of glb is 4.791 untits, archer is 1.832, so we need to scale down enemy */
 export const ENEMY_SCALE = 0.32;
