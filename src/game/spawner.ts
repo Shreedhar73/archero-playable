@@ -1,5 +1,6 @@
 import {
   ENEMY_RADIUS,
+  ENEMIES_TO_KILL,
   ENEMY_HP,
   ROOM_DEPTH,
   ROOM_WIDTH,
@@ -7,13 +8,17 @@ import {
 } from "../config.ts";
 import type { Enemy } from "./enemy.ts";
 
-/** Countdown to the next enemy spawn. Plain state like everything else, no restart on orient. change */
+/**
+ * Countdown to the next enemy spawn, and how many have been sent so far.
+ * Plain state like everything else, so an orientation change cannot reset it.
+ */
 export interface Spawner {
   cooldown: number;
+  spawned: number;
 }
 
 export function createSpawner(): Spawner {
-  return { cooldown: SPAWN_INTERVAL };
+  return { cooldown: SPAWN_INTERVAL, spawned: 0 };
 }
 
 /** First free slot ( dead or start), on null when every one is on play. */
@@ -50,6 +55,10 @@ export function updateSpawner(
   enemies: Enemy[],
   dt: number,
 ): void {
+  // A level is exactly ENEMIES_TO_KILL enemies. Once they have all been
+  // sent, the spawner is done - the level ends when the last one dies.
+  if (spawner.spawned >= ENEMIES_TO_KILL) return;
+
   spawner.cooldown -= dt;
   if (spawner.cooldown > 0) return;
   const enemy = freeSlot(enemies);
@@ -59,5 +68,6 @@ export function updateSpawner(
     return;
   }
   placeAtEdge(enemy);
+  spawner.spawned += 1;
   spawner.cooldown = SPAWN_INTERVAL;
 }

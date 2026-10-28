@@ -8,6 +8,8 @@ import { WorldScene } from "./three/world.ts";
 import { createPlayer, movePlayer } from "./game/player.ts";
 import { keyboardDirection } from "./input/keyboard.ts";
 import { Joystick } from "./ui/joystick.ts";
+import { addKills, createState } from "./game/state.ts";
+import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
 import { loadArcher, loadEnemy } from "./three/assets.ts";
 import { createEnemies, separateEnemies, updateEnemies } from "./game/enemy.ts";
@@ -31,6 +33,7 @@ async function boot(): Promise<void> {
   const enemies = createEnemies();
   const spawner = createSpawner();
   const projectiles = createProjectiles();
+  const state = createState();
 
   const player = createPlayer();
   const obstacles = createObstacles();
@@ -80,7 +83,8 @@ async function boot(): Promise<void> {
     separateEnemies(enemies);
     updateEnemyAttacks(enemies, player, dt);
     updateShooting(player, enemies, projectiles, dt);
-    updateProjectiles(projectiles, enemies, obstacles, dt);
+    addKills(state, updateProjectiles(projectiles, enemies, obstacles, dt));
+    if (player.hp <= 0) endRun(state);
     world.syncPlayer(player.x, player.z, player.facing, player.throttle);
     for (let i = 0; i < enemies.length; i++) {
       const ene = enemies[i];
