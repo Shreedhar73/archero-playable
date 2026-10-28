@@ -1,6 +1,9 @@
 /**
  * Rebuilds assets/*.glb from the untouched models in assets/raw/.
  *
+ * The player's own model is not here: it is merged from a character and four
+ * Mixamo clips by scripts/build-playable.mjs, which runs the same passes.
+ *
  * The bundle is one inlined HTML file, so every byte here costs ~1.33 bytes
  * base64 in dist/. These models are stock Mixamo / three.js samples and carry a
  * lot that this playable never renders: unused UV sets, a normal map invisible
@@ -40,20 +43,12 @@ const io = new NodeIO()
   .registerDependencies({ "meshopt.encoder": MeshoptEncoder });
 
 /** Mixamo rigs animate every finger joint; nothing here is ever that close. */
-const FINGER = /Hand(Thumb|Index|Middle|Ring|Pinky)\d/;
-
-/**
- * Bind poses that face -Z and must be turned to face +Z, the engine's forward.
- * Baked here so no renderer carries a per-asset yaw offset.
- */
-const TURN_AROUND = new Set(["archer.glb"]);
-
-/** Quaternion [x, y, z, w] for half a turn about Y: [axis * sin(t/2), cos(t/2)]. */
-const YAW_180 = [0, 1, 0, 0];
+// Mixamo names finger bones HandThumb1..; 3ds Max Biped rigs name them
+// "Bip001 L Finger01". Both are detail no camera at this distance resolves.
+const FINGER = /Hand(Thumb|Index|Middle|Ring|Pinky)\d|Finger\d/;
 
 /** Only these clips are reachable from a game state. */
 const KEEP_CLIPS = {
-  "archer.glb": ["Idle", "Run"],
   "enemy.glb": ["Idle", "Running", "Punch", "Death"],
 };
 
@@ -125,23 +120,6 @@ function dropNormalMaps(doc) {
   return dropped;
 }
 
-/**
- * Reparents the scene under a rotated node. It has to sit ABOVE the existing
- * root: a skinned mesh ignores its own node's transform, but the joints live
- * inside that root, so rotating above it rotates them and the skin follows.
- * A wrapper also composes with the root's existing -90deg X rotation for free,
- * instead of multiplying two quaternions by hand.
- */
-function faceForward(doc) {
-  const scene = doc.getRoot().getDefaultScene();
-  const wrapper = doc.createNode("ForwardZ").setRotation(YAW_180);
-  for (const node of scene.listChildren()) {
-    scene.removeChild(node);
-    wrapper.addChild(node);
-  }
-  scene.addChild(wrapper);
-}
-
 async function optimize(name) {
   const src = `${assets}raw/${name}`;
   const dst = `${assets}${name}`;
@@ -152,8 +130,6 @@ async function optimize(name) {
   const orphans = dropOrphanSamplers(doc);
   const uvs = dropExtraTexcoords(doc);
   const normals = dropNormalMaps(doc);
-  const turned = TURN_AROUND.has(name);
-  if (turned) faceForward(doc);
 
   await doc.transform(
     // prune first so later passes don't spend work on orphans.
@@ -182,8 +158,7 @@ async function optimize(name) {
     `${name}: ${before} -> ${after} B  (${(after / before * 100).toFixed(0)}%)  ` +
       `base64 ${b64(before)} -> ${b64(after)} MB  ` +
       `[clips kept ${KEEP_CLIPS[name].join("/")}, -${fingers} finger channels, ` +
-      `-${orphans} orphan samplers, -${uvs} uv sets, -${normals} normal maps` +
-      `${turned ? ", turned to face +Z" : ""}]`,
+      `-${orphans} orphan samplers, -${uvs} uv sets, -${normals} normal maps]`,
   );
   return after;
 }

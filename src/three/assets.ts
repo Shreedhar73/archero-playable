@@ -5,7 +5,7 @@ import {
   GLTFLoader,
 } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
-import archerUrl from "../../assets/archer.glb";
+import archerUrl from "../../assets/archer_playable.glb";
 import enemyURL from "../../assets/enemy.glb";
 
 /**
@@ -16,7 +16,11 @@ import enemyURL from "../../assets/enemy.glb";
  */
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
-/** Loads the archer . Awaited during boot, so are preloaded when game starts */
+/**
+ * Loads the archer: Erika with Idle, Run, Shoot and Death retargeted onto her
+ * rig by `scripts/build-playable.mjs`. Awaited during boot, so every clip is
+ * resident before the first frame.
+ */
 export function loadArcher(): Promise<GLTF> {
   return loader.loadAsync(archerUrl);
 }

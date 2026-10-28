@@ -54,6 +54,24 @@ scripts/
 Key invariant: game state lives outside renderers — resize/orientation only
 re-layouts (`engine/resize.ts`), never restarts.
 
+## Assets
+
+The `assets/*.glb` the bundle inlines are committed; their sources are not,
+because the Mixamo downloads are tens of megabytes each.
+
+```sh
+npm run convert       # assets/raw/*.fbx -> intermediate glbs (headless Chromium)
+npm run archer        # convert, then merge into assets/archer_playable.glb
+npm run assets        # rebuild the other assets/*.glb from assets/raw/
+npm run assets:check  # print clips, bounds and bone names of the built files
+```
+
+To rebuild the archer, `assets/raw/` needs the rigged character export as
+`erika_archer.glb` plus four Mixamo downloads: `Standing Idle.fbx`,
+`Running.fbx` (**without** "In Place"), `Standing Aim Recoil.fbx`,
+`Standing Death Left 01.fbx`, and `Erika Archer With Bow Arrow.fbx` for the
+bow itself.
+
 ## Commands
 
 ```sh
