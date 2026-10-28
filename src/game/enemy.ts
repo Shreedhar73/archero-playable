@@ -7,6 +7,7 @@ import {
 import { clampToRoom } from "./room.ts";
 import { pushOutOfObstacles } from "./collision.ts";
 import type { Obstacle } from "./obstacles.ts";
+import { flowAt, type Grid } from "./pathfind.ts";
 
 /** One enemy. Exists for the whole session; 'alive' decides if it is simulated  */
 export interface Enemy {
@@ -37,7 +38,8 @@ export function createEnemies(): Enemy[] {
 /**
  * Straight-line seek: aim at the player, step, then let collision correct the
  * position. Nothing here knows the room's shape, so an enemy that walks into a
- * crate keeps choosing the same direction into it.
+ * crate keeps choosing the same direction into it. Chapter 6.7 replaces this
+ * direction with one read from a flow field.
  */
 export function updateEnemies(
   enemies: Enemy[],
@@ -45,6 +47,7 @@ export function updateEnemies(
   targetZ: number,
   dt: number,
   obstacles: Obstacle[],
+  grid: Grid,
 ): void {
   const contact = ENEMY_RADIUS + PLAYER_RADIUS;
   for (let i = 0; i < enemies.length; i++) {
@@ -58,8 +61,12 @@ export function updateEnemies(
       continue;
     }
 
-    const dirX = dx / distance;
-    const dirZ = dz / distance;
+    // The field knows the room's shape; the straight line does not. Fall back
+    // to the straight line only where the flood never arrived: the player's
+    // own cell, and anywhere sealed off from it.
+    const flow = flowAt(grid, enemy.x, enemy.z);
+    const dirX = flow.known ? flow.x : dx / distance;
+    const dirZ = flow.known ? flow.z : dz / distance;
 
     enemy.facing = Math.atan2(dirX, dirZ);
     enemy.throttle = 1;
