@@ -12,7 +12,9 @@ export class ObstacleViews {
         new BoxGeometry(e.halfX * 2, HEIGHT, e.halfZ * 2),
         material,
       );
-      mesh.position.set(e.x, HEIGHT, e.z);
+      // BoxGeometry is centred on its origin, so half the height lifts it to
+      // stand on the floor rather than hover above it.
+      mesh.position.set(e.x, HEIGHT / 2, e.z);
       this.root.add(mesh);
     });
   }
