@@ -4,8 +4,8 @@
  * renderers read this, never the other way around. The game loop updates this, and the renderers read this.
  */
 
-import { PLAYER_SPEED, PLAYER_RADIUS, ROOM_SIZE } from "../config.ts";
-import { clamp } from "../engine/math.ts";
+import { PLAYER_SPEED, PLAYER_RADIUS } from "../config.ts";
+import { clampToRoom } from "./room.ts";
 
 export interface Player {
   /** Player, Height is constant so Y is not stored, x and z are stored for movement and collision detection. */
@@ -37,7 +37,5 @@ export function movePlayer(
   player.throttle = Math.hypot(dirX, dirZ);
   player.x += dirX * PLAYER_SPEED * dt;
   player.z += dirZ * PLAYER_SPEED * dt;
-  const limit = ROOM_SIZE / 2 - PLAYER_RADIUS;
-  player.x = clamp(player.x, -limit, limit);
-  player.z = clamp(player.z, -limit, limit);
+  clampToRoom(player, PLAYER_RADIUS);
 }
