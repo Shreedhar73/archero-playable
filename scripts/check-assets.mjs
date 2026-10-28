@@ -8,7 +8,7 @@
  * Node names are printed AFTER three's sanitizing, which is what game code must
  * use (`mixamorig:RightHand` arrives as `mixamorigRightHand`).
  *
- *   node scripts/check-assets.mjs assets/archer.glb
+ *   node scripts/check-assets.mjs assets/archer_playable.glb
  */
 import { readFileSync } from 'node:fs';
 // Node has no DOM: stub just enough for GLTFLoader's image path so the
