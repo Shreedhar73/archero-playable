@@ -9,7 +9,9 @@ export const STORE_URLS = {
 
 export const PLAYER_SPEED = 3; // units per second
 
-export const ROOM_SIZE = 10; // units, square room
+/**Room is tall rectangle */
+export const ROOM_WIDTH = 9;
+export const ROOM_DEPTH = 12;
 
 export const PLAYER_RADIUS = 0.3; // units, for collision detection
 

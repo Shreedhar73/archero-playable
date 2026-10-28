@@ -1,9 +1,15 @@
 import * as THREE from "three";
-import { ROOM_SIZE } from "../config.ts";
+
 import { ArcherView } from "./archer.ts";
 import { type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EnemyViews } from "./enemy.ts";
 import type { Enemy } from "../game/enemy.ts";
+import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
+import { checkerTexture } from "./textures.ts";
+
+/** Visual only. clampToRoom is what actually stops a body at the wall. */
+const WALL_HEIGHT = 0.7;
+const WALL_THICKNESS = 0.3;
 
 /**
  * Three.js world boot: renderer, camera, light. Owns the #world canvas,
@@ -22,7 +28,9 @@ export class WorldScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     document.body.appendChild(this.renderer.domElement);
 
-    this.scene.background = new THREE.Color(0x1a1c2c);
+    // Matches the surround, so anything the ground does not reach still reads
+    // as distance rather than as a letterbox.
+    this.scene.background = new THREE.Color(0x93b579);
 
     this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
     this.camera.position.set(0, 10, 8);
@@ -30,23 +38,67 @@ export class WorldScene {
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x444466, 1.2));
 
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(ROOM_SIZE, ROOM_SIZE),
-      new THREE.MeshStandardMaterial({ color: 0x4a7c3f }),
-    );
-    floor.rotation.x = -Math.PI / 2;
-    this.scene.add(floor);
+    this.addSurround();
+    this.addFloor();
+    this.addWalls();
 
     this.archer = new ArcherView(archerGltf);
     this.scene.add(this.archer.root);
+
     this.enemies = new EnemyViews(enemyGltf);
     this.scene.add(this.enemies.root);
-
-    const grid = new THREE.GridHelper(ROOM_SIZE, ROOM_SIZE, 0x2f5a28, 0x2f5a28);
-    grid.position.y = 0.01; // avoid z-fighting with floor
-    this.scene.add(grid);
-    // TODO: room/level geometry, directional light, entity meshes
   }
+
+  /**
+   * Ground outside the walls. A 9x12 room cannot fill a 9:19 phone screen, so
+   * what surrounds it has to be land rather than void. Flat and paler than the
+   * arena, as in the reference: the checker marks where play happens, so
+   * checkering the outside too would say the opposite.
+   */
+  private addSurround(): void {
+    const surround = new THREE.Mesh(
+      new THREE.PlaneGeometry(ROOM_WIDTH * 6, ROOM_DEPTH * 6),
+      new THREE.MeshStandardMaterial({ color: 0x93b579 }),
+    );
+    surround.rotation.x = -Math.PI / 2;
+    // Just under the floor, so the two coplanar planes cannot z-fight.
+    surround.position.y = -0.02;
+    this.scene.add(surround);
+  }
+
+  /** One checker square per world unit, which is why the GridHelper is gone. */
+  private addFloor(): void {
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(ROOM_WIDTH, ROOM_DEPTH),
+      new THREE.MeshStandardMaterial({
+        // Low contrast, as in the reference: the checker is a scale cue, not a
+        // pattern competing with the characters.
+        map: checkerTexture("#6fb04a", "#68a844", ROOM_WIDTH / 2, ROOM_DEPTH / 2),
+      }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    this.scene.add(floor);
+  }
+
+  /** Four boxes on the room's edges: x, z, sizeX, sizeZ. */
+  private addWalls(): void {
+    const material = new THREE.MeshStandardMaterial({ color: 0x8a7a5c });
+    const walls: [number, number, number, number][] = [
+      [0, -ROOM_DEPTH / 2, ROOM_WIDTH + WALL_THICKNESS, WALL_THICKNESS],
+      [0, ROOM_DEPTH / 2, ROOM_WIDTH + WALL_THICKNESS, WALL_THICKNESS],
+      [-ROOM_WIDTH / 2, 0, WALL_THICKNESS, ROOM_DEPTH],
+      [ROOM_WIDTH / 2, 0, WALL_THICKNESS, ROOM_DEPTH],
+    ];
+    for (const [x, z, sizeX, sizeZ] of walls) {
+      const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(sizeX, WALL_HEIGHT, sizeZ),
+        material,
+      );
+      wall.position.set(x, WALL_HEIGHT / 2, z);
+      this.scene.add(wall);
+    }
+  }
+
   /** Sync the player mesh position with the game state. */
   syncPlayer(x: number, z: number, facing: number, throttle: number): void {
     this.archer.sync(x, z, facing, throttle);
@@ -66,7 +118,7 @@ export class WorldScene {
     this.renderer.render(this.scene, this.camera);
   }
 
-  /** advances anumation. Separate from render so loop's phase stays visible */
+  /** Advances animation. Separate from render so the loop's phases stay visible. */
   update(dt: number): void {
     this.archer.advance(dt);
     this.enemies.advance(dt);

@@ -4,7 +4,7 @@
  * renderers read this, never the other way around. The game loop updates this, and the renderers read this.
  */
 
-import { PLAYER_SPEED, PLAYER_RADIUS } from "../config.ts";
+import { PLAYER_SPEED, PLAYER_RADIUS, ROOM_DEPTH } from "../config.ts";
 import { clampToRoom } from "./room.ts";
 
 export interface Player {
@@ -21,7 +21,7 @@ export interface Player {
 }
 
 export function createPlayer(): Player {
-  return { x: 0, z: 0, facing: 0, throttle: 0 };
+  return { x: 0, z: ROOM_DEPTH / 2 - 2, facing: 0, throttle: 0 };
 }
 
 /** Move the player based on input direction and delta time. */

@@ -1,5 +1,10 @@
-import { ENEMY_RADIUS, ROOM_SIZE, SPAWN_INTERVAL } from "../config";
-import type { Enemy } from "./enemy";
+import {
+  ENEMY_RADIUS,
+  ROOM_DEPTH,
+  ROOM_WIDTH,
+  SPAWN_INTERVAL,
+} from "../config.ts";
+import type { Enemy } from "./enemy.ts";
 
 /** Countdown to the next enemy spawn. Plain state like everything else, no restart on orient. change */
 export interface Spawner {
@@ -21,14 +26,13 @@ function freeSlot(enemies: Enemy[]): Enemy | null {
   return null;
 }
 
-/** Place the enemy on circle inscribed in room, at a random angle. Every new Place is reset */
+/** Spawsn the enemy at far edge. The player enters at bottom and the room fills from the top. */
 
 function placeAtEdge(enemy: Enemy): void {
-  const edge = ROOM_SIZE / 2 - ENEMY_RADIUS;
-  const angle = Math.random() * Math.PI * 2;
+  const halfX = ROOM_WIDTH / 2 - ENEMY_RADIUS;
 
-  enemy.x = Math.sin(angle) * edge;
-  enemy.z = Math.cos(angle) * edge;
+  enemy.x = (Math.random() * 2 - 1) * halfX;
+  enemy.z = -(ROOM_DEPTH / 2 - ENEMY_RADIUS);
 
   enemy.facing = 0;
   enemy.throttle = 0;

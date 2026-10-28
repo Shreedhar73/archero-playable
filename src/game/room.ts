@@ -1,4 +1,4 @@
-import { ROOM_SIZE } from "../config.ts";
+import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
 import { clamp } from "../engine/math.ts";
 
 export interface Positioned {
@@ -6,10 +6,10 @@ export interface Positioned {
   z: number;
 }
 
-/** Leeps a body inside the walls. Deliberately the last word on position */
-
+/** Keeps a body inside the walls. Runs last, after every other position fix. */
 export function clampToRoom(body: Positioned, radius: number): void {
-  const limit = ROOM_SIZE / 2 - radius;
-  body.x = clamp(body.x, -limit, limit);
-  body.z = clamp(body.z, -limit, limit);
+  const limitX = ROOM_WIDTH / 2 - radius;
+  const limitZ = ROOM_DEPTH / 2 - radius;
+  body.x = clamp(body.x, -limitX, limitX);
+  body.z = clamp(body.z, -limitZ, limitZ);
 }
