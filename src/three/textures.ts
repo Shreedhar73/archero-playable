@@ -40,3 +40,40 @@ export function checkerTexture(
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
+
+/**
+ * Wooden planks with a dark border, for crates. Drawn rather than loaded: a
+ * 64px canvas costs nothing in a bundle where every asset byte is base64.
+ */
+export function plankTexture(
+  base: string,
+  line: string,
+  edge: string,
+): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = SIZE;
+  canvas.height = SIZE;
+
+  const ctx = canvas.getContext("2d");
+  if (ctx === null) throw new Error("no 2d canvas context");
+
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+
+  // Three planks, drawn as the gaps between them.
+  ctx.fillStyle = line;
+  for (let i = 1; i < 3; i++) {
+    ctx.fillRect(0, (SIZE / 3) * i - 1, SIZE, 2);
+  }
+
+  // Dark border reads as the box's edge from any distance, which is what
+  // gives these the toon look the references have.
+  ctx.strokeStyle = edge;
+  ctx.lineWidth = 5;
+  ctx.strokeRect(0, 0, SIZE, SIZE);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.magFilter = THREE.NearestFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
