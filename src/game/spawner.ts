@@ -48,6 +48,7 @@ function placeAtEdge(enemy: Enemy): void {
   enemy.dying = 0;
   enemy.attackCooldown = 0;
   enemy.attacking = false;
+  enemy.hitFlash = 0;
 }
 
 export function updateSpawner(
