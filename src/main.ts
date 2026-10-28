@@ -56,7 +56,7 @@ async function boot(): Promise<void> {
 
   startLoop(app, (dt) => {
     const dir = joystick.dragging ? joystick.direction : keyboardDirection();
-    movePlayer(player, dir.x, dir.z, dt);
+    movePlayer(player, dir.x, dir.z, dt, obstacles);
     updateSpawner(spawner, enemies, dt);
     updateEnemies(enemies, player.x, player.z, dt);
     separateEnemies(enemies);
