@@ -5,6 +5,7 @@ import { type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EnemyViews } from "./enemy.ts";
 import type { Enemy } from "../game/enemy.ts";
 import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
+import { frameRoom } from "./camera.ts";
 import { checkerTexture } from "./textures.ts";
 
 /** Visual only. clampToRoom is what actually stops a body at the wall. */
@@ -32,9 +33,10 @@ export class WorldScene {
     // as distance rather than as a letterbox.
     this.scene.background = new THREE.Color(0x93b579);
 
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-    this.camera.position.set(0, 10, 8);
-    this.camera.lookAt(0, 0, 0);
+    // Long lens, not a wide one: a narrow FOV from far away keeps the room's
+    // near and far edges nearly the same width, so the arena reads as a
+    // rectangle. frameRoom sets position, near and far on every resize.
+    this.camera = new THREE.PerspectiveCamera(22, 1, 1, 100);
 
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x444466, 1.2));
 
@@ -111,7 +113,7 @@ export class WorldScene {
   resize(w: number, h: number): void {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+    frameRoom(this.camera);
   }
 
   render(): void {
