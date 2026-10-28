@@ -6,6 +6,7 @@ import { EnemyViews } from "./enemy.ts";
 import type { Enemy } from "../game/enemy.ts";
 import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
 import { frameRoom } from "./camera.ts";
+import { device } from "../engine/device.ts";
 import { checkerTexture } from "./textures.ts";
 import { Scenery } from "./scenery.ts";
 import { ArrowViews } from "./arrows.ts";
@@ -37,7 +38,7 @@ export class WorldScene {
     // the ground rather than floating above a painted floor.
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.appendChild(this.renderer.domElement);
+    device.appendChild(this.renderer.domElement);
 
     // Matches the surround, so anything the ground does not reach still reads
     // as distance rather than as a letterbox.

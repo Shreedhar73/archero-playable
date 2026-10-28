@@ -3,6 +3,7 @@ import { ENEMY_RADIUS } from "./config.ts";
 import { adapter } from "@network";
 import { startLoop } from "./engine/loop.ts";
 import { onResize } from "./engine/resize.ts";
+import { device } from "./engine/device.ts";
 import { WorldScene } from "./three/world.ts";
 import { createPlayer, movePlayer } from "./game/player.ts";
 import { keyboardDirection } from "./input/keyboard.ts";
@@ -40,9 +41,9 @@ async function boot(): Promise<void> {
   const world = new WorldScene(archer, enemy, obstacles);
 
   const app = new Application();
-  await app.init({ resizeTo: window, backgroundAlpha: 0, antialias: true });
+  await app.init({ resizeTo: device, backgroundAlpha: 0, antialias: true });
   app.canvas.id = "ui";
-  document.body.appendChild(app.canvas);
+  device.appendChild(app.canvas);
 
   const joystick = new Joystick();
 

@@ -19,7 +19,15 @@
         -webkit-user-select: none;
         -webkit-touch-callout: none;
       }
-      canvas {
+      /* Canvases size against #device, never the viewport: on a phone
+         #device IS the viewport, on desktop it is the frame below. */
+      #device {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        background: #1a1c2c;
+      }
+      #device canvas {
         position: absolute;
         inset: 0;
         display: block;
@@ -32,9 +40,38 @@
       #ui {
         z-index: 1;
       }
+
+      /* Desktop — mouse, fine pointer, room to spare: show the creative in a
+         phone frame, because that is the only place it will ever run. Touch
+         devices, tablets included, keep the whole screen. */
+      @media (hover: hover) and (pointer: fine) and (min-width: 600px) {
+        body {
+          display: grid;
+          place-items: center;
+          background: radial-gradient(
+            circle at 50% 30%,
+            #3b4152 0%,
+            #22252f 60%,
+            #15161d 100%
+          );
+        }
+
+        #device {
+          position: relative;
+          inset: auto;
+          height: min(94vh, 900px);
+          /* 9:16, matching reference.jpg's 542x960. A narrower frame makes the
+             same room cover less of the screen, which reads as dead space. */
+          aspect-ratio: 9 / 16;
+          border: 10px solid #0e0f15;
+          border-radius: 42px;
+          box-shadow: 0 24px 70px rgb(0 0 0 / 0.5);
+        }
+      }
     </style>
   </head>
   <body>
+    <div id="device"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
