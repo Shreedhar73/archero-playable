@@ -11,7 +11,8 @@
     "assets:check": "node scripts/check-assets.mjs assets/archer.glb && node scripts/check-assets.mjs assets/enemy.glb",
     "build": "npm run check && npm run build:generic",
     "build:generic": "vite build --mode generic && node scripts/package.mjs generic",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "shot": "node scripts/shot.mjs"
   },
   "dependencies": {
     "pixi.js": "^8.8.1",
