@@ -11,6 +11,7 @@ import { Joystick } from "./ui/joystick.ts";
 import { Hud } from "./ui/hud.ts";
 import { HealthBars } from "./ui/healthBars.ts";
 import { addKills, createState, progress } from "./game/state.ts";
+import { EndCard } from "./ui/endCard.ts";
 import { TutorialHand } from "./ui/tutorialHand.ts";
 import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
@@ -66,12 +67,15 @@ async function boot(): Promise<void> {
   const hud = new Hud();
   // One per enemy, plus the player's at index 0.
   const bars = new HealthBars(enemies.length + 1);
+  const endCard = new EndCard();
   const hand = new TutorialHand();
 
   app.stage.addChild(hud);
   app.stage.addChild(bars);
   app.stage.addChild(joystick);
   app.stage.addChild(hand);
+  // Last, so it covers the joystick: the run is over, the stick is not live.
+  app.stage.addChild(endCard);
   app.stage.eventMode = "static";
   app.stage.hitArea = app.screen;
   joystick.listenOn(app.stage);
@@ -103,6 +107,7 @@ async function boot(): Promise<void> {
     joystick.y = w > h ? h * 0.72 : h * 0.84;
     hud.layout(w, h, scale);
     bars.layout(w, h);
+    endCard.layout(w, h);
     hand.layout(w, h, joystick.x, joystick.y);
     // TODO: re-position UI elements
   });
@@ -128,8 +133,12 @@ async function boot(): Promise<void> {
       updateShooting(player, enemies, projectiles, dt);
       addKills(state, updateProjectiles(projectiles, enemies, obstacles, dt));
       if (player.hp <= 0) endRun(state);
+    } else if (!endCard.visible) {
+      endCard.show(state.points, state.cleared);
     }
 
+    // Views keep syncing and mixers keep advancing after the run ends, so the
+    // room idles behind the card instead of freezing mid-stride.
     hud.update(state.points, progress(state));
     world.syncPlayer(player.x, player.z, player.facing, player.throttle);
     for (let i = 0; i < enemies.length; i++) {
