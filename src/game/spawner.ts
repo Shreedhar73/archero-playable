@@ -26,15 +26,15 @@ export function createSpawner(random: () => number = Math.random): Spawner {
   return { cooldown: SPAWN_INTERVAL, spawned: 0, random };
 }
 
-/** First free slot ( dead or start), on null when every one is on play. */
+/** Index of the first free slot, or -1 when every one is in play. */
 
-function freeSlot(enemies: Enemy[]): Enemy | null {
+function freeSlot(enemies: Enemy[]): number {
   for (let i = 0; i < enemies.length; i++) {
     const enemy = enemies[i];
 
-    if (!enemy.alive) return enemy;
+    if (!enemy.alive) return i;
   }
-  return null;
+  return -1;
 }
 
 /** Spawsn the enemy at far edge. The player enters at bottom and the room fills from the top. */
@@ -52,8 +52,10 @@ function placeAtEdge(
   enemy.facing = 0;
   enemy.throttle = 0;
   enemy.alive = true;
-  // Kind comes from the spawn order, not the pool slot: a slot is reused
-  // and would otherwise inherit whatever died in it.
+  // Kind comes from the POOL SLOT, not the spawn order. Each slot is one kind
+  // for the whole session, which is what lets the renderer build the right
+  // model and clip set for it once at boot instead of swapping models when
+  // something respawns.
   enemy.kind = ENEMY_KINDS[index % ENEMY_KINDS.length];
   // Every field, not just the interesting ones: this slot held a corpse.
   enemy.hp = ENEMY_HP;
@@ -74,13 +76,13 @@ export function updateSpawner(
 
   spawner.cooldown -= dt;
   if (spawner.cooldown > 0) return;
-  const enemy = freeSlot(enemies);
-  if (enemy == null) {
+  const slot = freeSlot(enemies);
+  if (slot === -1) {
     // pool full cannot spawn at this time
     spawner.cooldown = 0;
     return;
   }
-  placeAtEdge(enemy, spawner.random, spawner.spawned);
+  placeAtEdge(enemies[slot], spawner.random, slot);
   spawner.spawned += 1;
   spawner.cooldown = SPAWN_INTERVAL;
 }

@@ -156,7 +156,7 @@ async function boot(): Promise<void> {
     // each position is projected through the camera. project() returns a
     // shared object: read it before the next call.
     const head = world.project(player.x, BAR_HEIGHT_PLAYER, player.z);
-    bars.set(0, head.x, head.y, player.hp / PLAYER_HP, head.onScreen);
+    bars.set(0, head.x, head.y, player.hp / PLAYER_HP, head.onScreen, false);
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
       const over = world.project(enemy.x, BAR_HEIGHT_ENEMY, enemy.z);
@@ -167,6 +167,7 @@ async function boot(): Promise<void> {
         over.y,
         enemy.hp / ENEMY_HP,
         standing && over.onScreen,
+        true,
       );
     }
 

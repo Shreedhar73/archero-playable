@@ -4,11 +4,11 @@ dist/
 requirements/
 shots/
 
-# Archer pipeline. The Mixamo downloads are tens of MB each, and everything
-# fbx-to-glb.mjs writes is regenerated from them; assets/*.glb is the output
-# that actually ships and stays committed.
+# Archer pipeline. The Mixamo downloads are tens of MB each (the Pro Longbow
+# Pack alone is 39 MB, the merged raw glb 45 MB) and everything fbx-merge.mjs
+# writes is regenerated from them; assets/*.glb is the output that actually
+# ships and stays committed.
 assets/raw/*.fbx
-assets/raw/erika_archer.glb
-assets/raw/erika_bow.glb
-assets/raw/anim_*.glb
+assets/raw/Pro Longbow Pack/
+assets/raw/erika-final-raw.glb
 assets/raw/erika-textures/
