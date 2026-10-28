@@ -5,6 +5,8 @@
  */
 
 import { PLAYER_SPEED, PLAYER_RADIUS, ROOM_DEPTH } from "../config.ts";
+import { pushOurOfObstacles } from "./collision.ts";
+import type { Obstacle } from "./obstacles.ts";
 import { clampToRoom } from "./room.ts";
 
 export interface Player {
@@ -30,6 +32,7 @@ export function movePlayer(
   dirX: number,
   dirZ: number,
   dt: number,
+  obstacles: Obstacle[],
 ): void {
   if (dirX !== 0 || dirZ !== 0) {
     player.facing = Math.atan2(dirX, dirZ);
@@ -37,5 +40,6 @@ export function movePlayer(
   player.throttle = Math.hypot(dirX, dirZ);
   player.x += dirX * PLAYER_SPEED * dt;
   player.z += dirZ * PLAYER_SPEED * dt;
+  pushOurOfObstacles(player, PLAYER_RADIUS, obstacles);
   clampToRoom(player, PLAYER_RADIUS);
 }
