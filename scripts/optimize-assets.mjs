@@ -14,20 +14,30 @@
 import { readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { NodeIO } from "@gltf-transform/core";
-import { KHRMeshQuantization, EXTTextureWebP } from "@gltf-transform/extensions";
+import {
+  EXTMeshoptCompression,
+  EXTTextureWebP,
+  KHRMeshQuantization,
+} from "@gltf-transform/extensions";
 import {
   dedup,
+  meshopt,
   prune,
-  quantize,
   resample,
   sparse,
   textureCompress,
   weld,
 } from "@gltf-transform/functions";
+import { MeshoptEncoder } from "meshoptimizer";
 import sharp from "sharp";
 
 const assets = fileURLToPath(new URL("../assets/", import.meta.url));
-const io = new NodeIO().registerExtensions([KHRMeshQuantization, EXTTextureWebP]);
+// The meshopt encoder is wasm and loads asynchronously; the extension writes
+// through it, so the IO needs the ready instance as well as the transform.
+await MeshoptEncoder.ready;
+const io = new NodeIO()
+  .registerExtensions([EXTMeshoptCompression, KHRMeshQuantization, EXTTextureWebP])
+  .registerDependencies({ "meshopt.encoder": MeshoptEncoder });
 
 /** Mixamo rigs animate every finger joint; nothing here is ever that close. */
 const FINGER = /Hand(Thumb|Index|Middle|Ring|Pinky)\d/;
@@ -155,15 +165,12 @@ async function optimize(name) {
     resample({ tolerance: 1e-4 }),
     sparse(),
     textureCompress({ encoder: sharp, targetFormat: "webp", resize: [512, 512] }),
-    // KHR_mesh_quantization: three's GLTFLoader reads it natively, so this
-    // costs nothing in the bundle, unlike Draco or meshopt. Normals and UVs
-    // tolerate far less precision than positions at this camera distance.
-    quantize({
-      quantizePosition: 14,
-      quantizeNormal: 8,
-      quantizeTexcoord: 12,
-      quantizeWeight: 8,
-    }),
+    // EXT_meshopt_compression quantizes as part of its own work, so it stands
+    // in for a separate quantize() pass. Measured on the archer: 582 KB to
+    // 279 KB against a 29 KB decoder the bundle inlines once, for every model
+    // at once. Draco was measured too and rejected — 250 KB of wasm and
+    // wrapper costs more than the geometry it saves.
+    meshopt({ encoder: MeshoptEncoder, level: "high" }),
   );
 
   await io.write(dst, doc);

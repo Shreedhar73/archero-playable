@@ -18,7 +18,10 @@ globalThis.createImageBitmap = async () => ({ width: 1, height: 1, close() {} })
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-const loader = new GLTFLoader();
+// The pipeline writes EXT_meshopt_compression, which GLTFLoader refuses to
+// parse without a decoder.
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const file = process.argv[2];
 const buf = readFileSync(file);
 const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
