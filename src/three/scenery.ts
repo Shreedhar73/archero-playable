@@ -14,10 +14,15 @@ const SEED = 20260112;
  */
 const SPREAD_X = 8.5;
 const SPREAD_Z_NEAR = 13;
-const SPREAD_Z_FAR = 10;
+const SPREAD_Z_FAR = 11;
 
 /** Keep-out around the room, so nothing grows through a wall. */
 const CLEARANCE = 1.1;
+
+/** Second keep-out: the patch of ground the joystick sits over. Props behind
+ *  a translucent widget read as dirt on the screen. */
+const UI_HALF_X = 4;
+const UI_MIN_Z = 7.4;
 
 interface PropKind {
   geometry: THREE.BufferGeometry;
@@ -27,6 +32,10 @@ interface PropKind {
   maxScale: number;
   /** Props sit on the ground, so each needs lifting by half its own height. */
   lift: number;
+  /** Nearest z this kind may scatter to. Tall props are kept out of the near
+   *  strip, because that is where the joystick lives and a 3-unit tree behind
+   *  a translucent UI widget is noise. */
+  maxZ: number;
 }
 
 /**
@@ -56,7 +65,7 @@ export class Scenery {
       const scale = new THREE.Vector3();
 
       for (let i = 0; i < kind.count; i++) {
-        const spot = this.findSpot(random);
+        const spot = this.findSpot(random, kind.maxZ);
         const size = range(random, kind.minScale, kind.maxScale);
         position.set(spot.x, kind.lift * size, spot.z);
         quaternion.setFromAxisAngle(
@@ -75,16 +84,21 @@ export class Scenery {
   }
 
   /** Rejection sampling: pick a point, retry while it lands on the room. */
-  private findSpot(random: () => number): { x: number; z: number } {
+  private findSpot(
+    random: () => number,
+    maxZ: number,
+  ): { x: number; z: number } {
     const halfX = ROOM_WIDTH / 2 + CLEARANCE;
     const halfZ = ROOM_DEPTH / 2 + CLEARANCE;
     for (let attempt = 0; attempt < 40; attempt++) {
       const x = range(random, -SPREAD_X, SPREAD_X);
-      const z = range(random, -SPREAD_Z_FAR, SPREAD_Z_NEAR);
-      if (Math.abs(x) > halfX || Math.abs(z) > halfZ) return { x, z };
+      const z = range(random, -SPREAD_Z_FAR, maxZ);
+      if (Math.abs(x) <= halfX && Math.abs(z) <= halfZ) continue;
+      if (Math.abs(x) < UI_HALF_X && z > UI_MIN_Z) continue;
+      return { x, z };
     }
     // Unreachable in practice; the band is far larger than the keep-out.
-    return { x: SPREAD_X, z: SPREAD_Z_NEAR };
+    return { x: SPREAD_X, z: maxZ };
   }
 
   private kinds(): PropKind[] {
@@ -94,27 +108,30 @@ export class Scenery {
         // which is the only angle this camera has.
         geometry: new THREE.ConeGeometry(0.75, 2.4, 7),
         material: new THREE.MeshStandardMaterial({ color: 0x3f7a35 }),
-        count: 34,
+        count: 58,
         minScale: 0.8,
         maxScale: 1.6,
         lift: 1.2,
+        maxZ: 8.5,
       },
       {
         // Low-poly sphere: faceted enough to catch light differently per face.
         geometry: new THREE.IcosahedronGeometry(0.55, 0),
         material: new THREE.MeshStandardMaterial({ color: 0x8d8475 }),
-        count: 26,
+        count: 40,
         minScale: 0.5,
         maxScale: 1.3,
         lift: 0.4,
+        maxZ: SPREAD_Z_NEAR,
       },
       {
         geometry: new THREE.BoxGeometry(0.8, 0.8, 0.8),
         material: new THREE.MeshStandardMaterial({ color: 0xb08b56 }),
-        count: 14,
+        count: 22,
         minScale: 0.7,
         maxScale: 1.1,
         lift: 0.4,
+        maxZ: SPREAD_Z_NEAR,
       },
     ];
   }
