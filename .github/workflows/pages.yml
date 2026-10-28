@@ -1,0 +1,56 @@
+# Publishes the generic build to GitHub Pages, so the playable can be opened
+# on a phone without installing anything. The build is one inlined HTML file,
+# which is exactly what Pages wants to serve.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time, and never cancel one in flight: a half-uploaded
+# artifact is a broken site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24: tests/sim.ts is TypeScript run directly by node, which needs
+      # the unflagged type stripping 22 does not have.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Chromium is only used by the screenshot and conversion scripts, never
+      # by the build.
+      - run: npm ci
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
+
+      # check -> headless simulation -> single-file build -> size gate.
+      - run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      # dist/generic holds exactly one index.html; package.mjs fails the build
+      # if the bundle ever splits.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/generic
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
