@@ -1,4 +1,5 @@
 import { Application } from "pixi.js";
+import { ENEMY_RADIUS } from "./config.ts";
 import { adapter } from "@network";
 import { startLoop } from "./engine/loop.ts";
 import { onResize } from "./engine/resize.ts";
@@ -11,6 +12,7 @@ import { loadArcher, loadEnemy } from "./three/assets.ts";
 import { createEnemies, separateEnemies, updateEnemies } from "./game/enemy.ts";
 import { createSpawner, updateSpawner } from "./game/spawner.ts";
 import { createObstacles } from "./game/obstacles.ts";
+import { createGrid, solveFlow } from "./game/pathfind.ts";
 
 /**
  * Composition root. Two stacked canvases: Three.js world (#world) below,
@@ -28,6 +30,9 @@ async function boot(): Promise<void> {
 
   const player = createPlayer();
   const obstacles = createObstacles();
+  // Planned with the enemy's radius baked in, so the field never routes
+  // anything through a gap it cannot fit through.
+  const grid = createGrid(obstacles, ENEMY_RADIUS);
 
   const world = new WorldScene(archer, enemy, obstacles);
 
@@ -57,8 +62,11 @@ async function boot(): Promise<void> {
   startLoop(app, (dt) => {
     const dir = joystick.dragging ? joystick.direction : keyboardDirection();
     movePlayer(player, dir.x, dir.z, dt, obstacles);
+    // One solve serves every enemy, and it early-outs unless the player
+    // changed cell.
+    solveFlow(grid, player.x, player.z);
     updateSpawner(spawner, enemies, dt);
-    updateEnemies(enemies, player.x, player.z, dt, obstacles);
+    updateEnemies(enemies, player.x, player.z, dt, obstacles, grid);
     separateEnemies(enemies);
     world.syncPlayer(player.x, player.z, player.facing, player.throttle);
     for (let i = 0; i < enemies.length; i++) {

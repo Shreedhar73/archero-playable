@@ -32,3 +32,8 @@ export const ENEMY_RADIUS = 0.35;
 
 /** Seconds between enemy spawns */
 export const SPAWN_INTERVAL = 1.5;
+
+/** Pathfinding grid resolution. Half a unit is finer than a body (0.7 across),
+ *  so a lane a body fits through is never closed by rounding, and 18x24 cells
+ *  is small enough to flood in well under a millisecond. */
+export const CELL_SIZE = 0.5;
