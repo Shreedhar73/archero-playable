@@ -1,5 +1,5 @@
 import { Application } from "pixi.js";
-import { ENEMY_RADIUS, ENEMY_HP, PLAYER_HP } from "./config.ts";
+import { ENEMY_RADIUS, ENEMY_HP, PLAYER_HP, TUTORIAL_TIMEOUT } from "./config.ts";
 import { adapter } from "@network";
 import { startLoop } from "./engine/loop.ts";
 import { onResize } from "./engine/resize.ts";
@@ -11,6 +11,7 @@ import { Joystick } from "./ui/joystick.ts";
 import { Hud } from "./ui/hud.ts";
 import { HealthBars } from "./ui/healthBars.ts";
 import { addKills, createState, progress } from "./game/state.ts";
+import { TutorialHand } from "./ui/tutorialHand.ts";
 import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
 import { loadArcher, loadEnemy } from "./three/assets.ts";
@@ -65,13 +66,26 @@ async function boot(): Promise<void> {
   const hud = new Hud();
   // One per enemy, plus the player's at index 0.
   const bars = new HealthBars(enemies.length + 1);
+  const hand = new TutorialHand();
 
   app.stage.addChild(hud);
   app.stage.addChild(bars);
   app.stage.addChild(joystick);
+  app.stage.addChild(hand);
   app.stage.eventMode = "static";
   app.stage.hitArea = app.screen;
   joystick.listenOn(app.stage);
+
+  // The tutorial ends on the first input of any kind, so the listeners are
+  // registered once and never removed — a flag is cheaper than teardown, and
+  // nothing else reads it after the first frame of gameplay.
+  let touched = false;
+  let tutorialElapsed = 0;
+  const noteInput = (): void => {
+    touched = true;
+  };
+  app.stage.on("pointerdown", noteInput);
+  window.addEventListener("keydown", noteInput, { once: true });
 
   onResize((w, h) => {
     world.resize(w, h);
@@ -89,22 +103,33 @@ async function boot(): Promise<void> {
     joystick.y = w > h ? h * 0.72 : h * 0.84;
     hud.layout(w, h, scale);
     bars.layout(w, h);
+    hand.layout(w, h, joystick.x, joystick.y);
     // TODO: re-position UI elements
   });
 
   startLoop(app, (dt) => {
-    const dir = joystick.dragging ? joystick.direction : keyboardDirection();
-    movePlayer(player, dir.x, dir.z, dt, obstacles);
-    // One solve serves every enemy, and it early-outs unless the player
-    // changed cell.
-    solveFlow(grid, player.x, player.z);
-    updateSpawner(spawner, enemies, dt);
-    updateEnemies(enemies, player.x, player.z, dt, obstacles, grid);
-    separateEnemies(enemies);
-    updateEnemyAttacks(enemies, player, dt);
-    updateShooting(player, enemies, projectiles, dt);
-    addKills(state, updateProjectiles(projectiles, enemies, obstacles, dt));
-    if (player.hp <= 0) endRun(state);
+    if (state.stage === "tutorial") {
+      hand.advance(dt);
+      tutorialElapsed += dt;
+      if (touched || tutorialElapsed >= TUTORIAL_TIMEOUT) {
+        state.stage = "gameplay";
+        hand.visible = false;
+      }
+    } else if (state.stage === "gameplay") {
+      const dir = joystick.dragging ? joystick.direction : keyboardDirection();
+      movePlayer(player, dir.x, dir.z, dt, obstacles);
+      // One solve serves every enemy, and it early-outs unless the player
+      // changed cell.
+      solveFlow(grid, player.x, player.z);
+      updateSpawner(spawner, enemies, dt);
+      updateEnemies(enemies, player.x, player.z, dt, obstacles, grid);
+      separateEnemies(enemies);
+      updateEnemyAttacks(enemies, player, dt);
+      updateShooting(player, enemies, projectiles, dt);
+      addKills(state, updateProjectiles(projectiles, enemies, obstacles, dt));
+      if (player.hp <= 0) endRun(state);
+    }
+
     hud.update(state.points, progress(state));
     world.syncPlayer(player.x, player.z, player.facing, player.throttle);
     for (let i = 0; i < enemies.length; i++) {
