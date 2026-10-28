@@ -4,7 +4,7 @@
  * renderers read this, never the other way around. The game loop updates this, and the renderers read this.
  */
 
-import { PLAYER_SPEED, PLAYER_RADIUS, ROOM_DEPTH } from "../config.ts";
+import { PLAYER_SPEED, PLAYER_RADIUS, PLAYER_HP, ROOM_DEPTH } from "../config.ts";
 import { pushOutOfObstacles } from "./collision.ts";
 import type { Obstacle } from "./obstacles.ts";
 import { clampToRoom } from "./room.ts";
@@ -20,10 +20,17 @@ export interface Player {
    */
 
   throttle: number;
+
+  /** Hit points. Reaching 0 ends the gameplay stage. */
+  hp: number;
+
+  /** Seconds until the next arrow. Ticks down even while moving, so stopping
+   *  fires at once instead of after a pause the player did not ask for. */
+  fireCooldown: number;
 }
 
 export function createPlayer(): Player {
-  return { x: 0, z: ROOM_DEPTH / 2 - 2, facing: 0, throttle: 0 };
+  return { x: 0, z: ROOM_DEPTH / 2 - 2, facing: 0, throttle: 0, hp: PLAYER_HP, fireCooldown: 0 };
 }
 
 /** Move the player based on input direction and delta time. */

@@ -1,5 +1,6 @@
 import {
   ENEMY_RADIUS,
+  ENEMY_HP,
   ROOM_DEPTH,
   ROOM_WIDTH,
   SPAWN_INTERVAL,
@@ -37,6 +38,11 @@ function placeAtEdge(enemy: Enemy): void {
   enemy.facing = 0;
   enemy.throttle = 0;
   enemy.alive = true;
+  // Every field, not just the interesting ones: this slot held a corpse.
+  enemy.hp = ENEMY_HP;
+  enemy.dying = 0;
+  enemy.attackCooldown = 0;
+  enemy.attacking = false;
 }
 
 export function updateSpawner(

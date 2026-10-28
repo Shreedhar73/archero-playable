@@ -1,5 +1,6 @@
 import {
   ENEMY_COUNT,
+  ENEMY_DEATH_TIME,
   ENEMY_RADIUS,
   ENEMY_SPEED,
   PLAYER_RADIUS,
@@ -9,13 +10,26 @@ import { pushOutOfObstacles } from "./collision.ts";
 import type { Obstacle } from "./obstacles.ts";
 import { flowAt, type Grid } from "./pathfind.ts";
 
-/** One enemy. Exists for the whole session; 'alive' decides if it is simulated  */
+/**
+ * One enemy. Exists for the whole session; `alive` decides if it is simulated.
+ *
+ * Dying is a third state, not a flag: a corpse must stay visible long enough
+ * to play its Death clip while taking no part in the simulation. `dying`
+ * counts that down, and the slot is only handed back when it reaches zero.
+ */
 export interface Enemy {
   x: number;
   z: number;
   facing: number;
   throttle: number;
   alive: boolean;
+  hp: number;
+  /** Seconds of Death clip left. 0 means not dying. */
+  dying: number;
+  /** Seconds until the next melee swing lands. */
+  attackCooldown: number;
+  /** Drives the Punch clip. Set by combat, read by the renderer. */
+  attacking: boolean;
 }
 
 /** FIxed-size pool, build once at boot. Nothing is created or destroyed during play
@@ -30,6 +44,10 @@ export function createEnemies(): Enemy[] {
       facing: 0,
       throttle: 0,
       alive: false,
+      hp: 0,
+      dying: 0,
+      attackCooldown: 0,
+      attacking: false,
     });
   }
   return enemies;
@@ -53,6 +71,17 @@ export function updateEnemies(
   for (let i = 0; i < enemies.length; i++) {
     const enemy = enemies[i];
     if (!enemy.alive) continue;
+
+    if (enemy.dying > 0) {
+      // Corpses do not move, do not push and do not block: they are only
+      // still here so the Death clip can finish.
+      enemy.dying -= dt;
+      enemy.throttle = 0;
+      enemy.attacking = false;
+      if (enemy.dying <= 0) enemy.alive = false;
+      continue;
+    }
+
     const dx = targetX - enemy.x;
     const dz = targetZ - enemy.z;
     const distance = Math.hypot(dx, dz);
@@ -77,15 +106,29 @@ export function updateEnemies(
   }
 }
 
+/**
+ * Applies damage, and reports whether this hit was the killing one so the
+ * caller can score it. Returns false on a later hit against the same corpse,
+ * which is what stops one enemy paying out twice.
+ */
+export function damageEnemy(enemy: Enemy, amount: number): boolean {
+  if (!enemy.alive || enemy.dying > 0) return false;
+  enemy.hp -= amount;
+  if (enemy.hp > 0) return false;
+  enemy.hp = 0;
+  enemy.dying = ENEMY_DEATH_TIME;
+  return true;
+}
+
 /** Separate overlapping enemies */
 
 export function separateEnemies(enemies: Enemy[]) {
   for (let i = 0; i < enemies.length; i++) {
     const a = enemies[i];
-    if (!a.alive) continue;
+    if (!a.alive || a.dying > 0) continue;
     for (let j = i + 1; j < enemies.length; j++) {
       const b = enemies[j];
-      if (!b.alive) continue;
+      if (!b.alive || b.dying > 0) continue;
 
       const dx = b.x - a.x;
       const dz = b.z - a.z;
