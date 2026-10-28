@@ -85,6 +85,13 @@ export const PROJECTILE_COUNT = 24;
 export const FIRE_INTERVAL = 0.4;
 export const FIRE_RANGE = 5;
 
+/**
+ * Seconds the draw-and-recoil pose holds after a shot. Shorter than the clip
+ * itself (0.7 s) so the archer settles back to idle between arrows instead of
+ * being permanently mid-recoil at FIRE_INTERVAL.
+ */
+export const SHOOT_POSE = FIRE_INTERVAL * 1.15;
+
 export const POINTS_PER_KILL = 10;
 export const ENEMIES_TO_KILL = ENEMY_COUNT;
 

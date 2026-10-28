@@ -1,5 +1,6 @@
 import * as THREE from "three";
 
+import type { Player } from "../game/player.ts";
 import { ArcherView } from "./archer.ts";
 import { type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { EnemyViews } from "./enemy.ts";
@@ -191,9 +192,11 @@ export class WorldScene {
     }
   }
 
-  /** Sync the player mesh position with the game state. */
-  syncPlayer(x: number, z: number, facing: number, throttle: number): void {
-    this.archer.sync(x, z, facing, throttle);
+  /** Sync the player mesh with the game state. Takes the whole player: the
+   *  view reads facing, throttle, the shoot timer and health, and adding each
+   *  as its own argument is how four positional numbers become five. */
+  syncPlayer(player: Player): void {
+    this.archer.sync(player);
   }
 
   syncEnemy(index: number, enemy: Enemy): void {

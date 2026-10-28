@@ -144,7 +144,7 @@ async function boot(): Promise<void> {
     // Views keep syncing and mixers keep advancing after the run ends, so the
     // room idles behind the card instead of freezing mid-stride.
     hud.update(state.points, progress(state));
-    world.syncPlayer(player.x, player.z, player.facing, player.throttle);
+    world.syncPlayer(player);
     for (let i = 0; i < enemies.length; i++) {
       const ene = enemies[i];
       world.syncEnemy(i, ene);

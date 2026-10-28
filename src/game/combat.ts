@@ -8,6 +8,7 @@ import {
   FIRE_INTERVAL,
   FIRE_RANGE,
   PLAYER_RADIUS,
+  SHOOT_POSE,
 } from "../config.ts";
 import type { Enemy } from "./enemy.ts";
 import type { Player } from "./player.ts";
@@ -33,6 +34,10 @@ export function updateShooting(
   dt: number,
 ): void {
   player.fireCooldown -= dt;
+  player.shooting = Math.max(0, player.shooting - dt);
+  // Moving cancels the pose outright: the archer cannot run with the bow
+  // drawn, and letting the clip finish while sprinting reads as a stutter.
+  if (player.throttle > 0) player.shooting = 0;
   if (player.throttle > 0 || player.fireCooldown > 0) return;
 
   const target = nearestEnemy(enemies, player.x, player.z, FIRE_RANGE);
@@ -58,6 +63,7 @@ export function updateShooting(
     false,
   );
   player.fireCooldown = FIRE_INTERVAL;
+  player.shooting = SHOOT_POSE;
 }
 
 /**

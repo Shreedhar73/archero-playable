@@ -27,10 +27,23 @@ export interface Player {
   /** Seconds until the next arrow. Ticks down even while moving, so stopping
    *  fires at once instead of after a pause the player did not ask for. */
   fireCooldown: number;
+
+  /** Seconds of shoot pose left, counted down by combat. 0 means not
+   *  shooting. Same shape as the enemy's `dying`: a timer the renderer reads,
+   *  so the view owns no state of its own. */
+  shooting: number;
 }
 
 export function createPlayer(): Player {
-  return { x: 0, z: ROOM_DEPTH / 2 - 2, facing: 0, throttle: 0, hp: PLAYER_HP, fireCooldown: 0 };
+  return {
+    x: 0,
+    z: ROOM_DEPTH / 2 - 2,
+    facing: 0,
+    throttle: 0,
+    hp: PLAYER_HP,
+    fireCooldown: 0,
+    shooting: 0,
+  };
 }
 
 /** Move the player based on input direction and delta time. */
