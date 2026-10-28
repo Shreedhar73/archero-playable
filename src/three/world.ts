@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { ROOM_SIZE } from "../config.ts";
+import { ArcherView } from "./archer.ts";
+import { type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 /**
  * Three.js world boot: renderer, camera, light. Owns the #world canvas,
@@ -9,9 +11,9 @@ export class WorldScene {
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
-  private readonly player: THREE.Mesh;
+  private readonly archer: ArcherView;
 
-  constructor() {
+  constructor(archerGltf: GLTF) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.domElement.id = "world";
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -32,12 +34,8 @@ export class WorldScene {
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
 
-    this.player = new THREE.Mesh(
-      new THREE.BoxGeometry(0.6, 1.8, 0.6),
-      new THREE.MeshStandardMaterial({ color: 0xe0c060 }),
-    );
-    this.player.position.y = 0.9;
-    this.scene.add(this.player);
+    this.archer = new ArcherView(archerGltf);
+    this.scene.add(this.archer.root);
 
     const grid = new THREE.GridHelper(ROOM_SIZE, ROOM_SIZE, 0x2f5a28, 0x2f5a28);
     grid.position.y = 0.01; // avoid z-fighting with floor
@@ -45,9 +43,8 @@ export class WorldScene {
     // TODO: room/level geometry, directional light, entity meshes
   }
   /** Sync the player mesh position with the game state. */
-  syncPlayer(x: number, z: number): void {
-    this.player.position.x = x;
-    this.player.position.z = z;
+  syncPlayer(x: number, z: number, facing: number, throttle: number): void {
+    this.archer.sync(x, z, facing, throttle);
   }
 
   resize(w: number, h: number): void {
@@ -58,5 +55,10 @@ export class WorldScene {
 
   render(): void {
     this.renderer.render(this.scene, this.camera);
+  }
+
+  /** advances anumation. Separate from render so loop's phase stays visible */
+  update(dt: number): void {
+    this.archer.advance(dt);
   }
 }
