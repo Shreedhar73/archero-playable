@@ -1,6 +1,12 @@
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { ENEMY_COUNT, ENEMY_SCALE } from "../config.ts";
-import { AnimationAction, AnimationMixer, Group, Object3D } from "three";
+import {
+  AnimationAction,
+  AnimationMixer,
+  Group,
+  LoopOnce,
+  Object3D,
+} from "three";
 import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { action } from "./clips.ts";
 import type { Enemy } from "../game/enemy.ts";
@@ -14,6 +20,11 @@ class EnemyView {
   private readonly mixer: AnimationMixer;
   private readonly idle: AnimationAction;
   private readonly run: AnimationAction;
+  private readonly punch: AnimationAction;
+  private readonly death: AnimationAction;
+  /** Death is a one-shot, so it is started on the transition rather than kept
+   *  playing at zero weight like the looping clips. */
+  private wasDying = false;
 
   constructor(gltf: GLTF) {
     this.root = clone(gltf.scene);
@@ -22,8 +33,15 @@ class EnemyView {
     this.mixer = new AnimationMixer(this.root);
     this.idle = action(this.mixer, gltf, "Idle");
     this.run = action(this.mixer, gltf, "Running");
+    this.punch = action(this.mixer, gltf, "Punch");
+    this.death = action(this.mixer, gltf, "Death");
     this.idle.play();
     this.run.play();
+    this.punch.play();
+    // Holds the last frame instead of snapping back to the bind pose, so a
+    // corpse stays down for the rest of its dying time.
+    this.death.setLoop(LoopOnce, 1);
+    this.death.clampWhenFinished = true;
   }
 
   sync(enemy: Enemy): void {
@@ -31,8 +49,20 @@ class EnemyView {
     this.root.position.x = enemy.x;
     this.root.position.z = enemy.z;
     this.root.rotation.y = enemy.facing;
-    this.run.weight = enemy.throttle;
-    this.idle.weight = 1 - enemy.throttle;
+
+    const dying = enemy.dying > 0;
+    if (dying && !this.wasDying) {
+      // reset() rewinds a clip that already ran: this slot may have died
+      // before, and a clamped one-shot stays finished until told otherwise.
+      this.death.reset().play();
+    }
+    this.wasDying = dying;
+
+    const punching = !dying && enemy.attacking;
+    this.death.weight = dying ? 1 : 0;
+    this.punch.weight = punching ? 1 : 0;
+    this.run.weight = dying || punching ? 0 : enemy.throttle;
+    this.idle.weight = dying || punching ? 0 : 1 - enemy.throttle;
   }
 
   advance(dt: number): void {
