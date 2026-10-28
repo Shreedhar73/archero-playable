@@ -13,6 +13,8 @@ import { createEnemies, separateEnemies, updateEnemies } from "./game/enemy.ts";
 import { createSpawner, updateSpawner } from "./game/spawner.ts";
 import { createObstacles } from "./game/obstacles.ts";
 import { createGrid, solveFlow } from "./game/pathfind.ts";
+import { createProjectiles, updateProjectiles } from "./game/projectiles.ts";
+import { updateEnemyAttacks, updateShooting } from "./game/combat.ts";
 
 /**
  * Composition root. Two stacked canvases: Three.js world (#world) below,
@@ -27,6 +29,7 @@ async function boot(): Promise<void> {
   const [archer, enemy] = await Promise.all([loadArcher(), loadEnemy()]);
   const enemies = createEnemies();
   const spawner = createSpawner();
+  const projectiles = createProjectiles();
 
   const player = createPlayer();
   const obstacles = createObstacles();
@@ -68,10 +71,16 @@ async function boot(): Promise<void> {
     updateSpawner(spawner, enemies, dt);
     updateEnemies(enemies, player.x, player.z, dt, obstacles, grid);
     separateEnemies(enemies);
+    updateEnemyAttacks(enemies, player, dt);
+    updateShooting(player, enemies, projectiles, dt);
+    updateProjectiles(projectiles, enemies, obstacles, dt);
     world.syncPlayer(player.x, player.z, player.facing, player.throttle);
     for (let i = 0; i < enemies.length; i++) {
       const ene = enemies[i];
       world.syncEnemy(i, ene);
+    }
+    for (let i = 0; i < projectiles.length; i++) {
+      world.syncArrow(i, projectiles[i]);
     }
     world.update(dt);
     world.render();

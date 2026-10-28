@@ -8,6 +8,8 @@ import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
 import { frameRoom } from "./camera.ts";
 import { checkerTexture } from "./textures.ts";
 import { Scenery } from "./scenery.ts";
+import { ArrowViews } from "./arrows.ts";
+import type { Projectile } from "../game/projectiles.ts";
 import type { Obstacle } from "../game/obstacles.ts";
 import { ObstacleViews } from "./obstacles.ts";
 
@@ -25,6 +27,7 @@ export class WorldScene {
   readonly renderer: THREE.WebGLRenderer;
   private readonly archer: ArcherView;
   private readonly enemies: EnemyViews;
+  private readonly arrows = new ArrowViews();
 
   constructor(archerGltf: GLTF, enemyGltf: GLTF, obstacles: Obstacle[]) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -59,6 +62,8 @@ export class WorldScene {
     this.archer = new ArcherView(archerGltf);
     this.castOnly(this.archer.root);
     this.scene.add(this.archer.root);
+
+    this.scene.add(this.arrows.root);
 
     this.enemies = new EnemyViews(enemyGltf);
     this.castOnly(this.enemies.root);
@@ -167,6 +172,10 @@ export class WorldScene {
 
   syncEnemy(index: number, enemy: Enemy): void {
     this.enemies.sync(index, enemy);
+  }
+
+  syncArrow(index: number, arrow: Projectile): void {
+    this.arrows.sync(index, arrow);
   }
 
   resize(w: number, h: number): void {
