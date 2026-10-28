@@ -75,3 +75,14 @@ export const ENEMIES_TO_KILL = ENEMY_COUNT;
 /** Derived, so the two can never drift apart. */
 export const POINTS_TARGET = ENEMIES_TO_KILL * POINTS_PER_KILL;
 
+/**
+ * Seconds the tutorial waits before starting the game on its own.
+ *
+ * The brief says the stage ends on first input, and it does — this is the
+ * floor under that. A player who never taps would otherwise watch a hand
+ * trace a figure-8 for the whole ad, which is the one outcome worth ruling
+ * out: no gameplay seen, no CTA reached.
+ */
+export const TUTORIAL_TIMEOUT = 3;
+
+
