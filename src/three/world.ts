@@ -62,7 +62,7 @@ export class WorldScene {
     // Shadows are the cheapest thing that makes objects look like they are on
     // the ground rather than floating above a painted floor.
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     device.appendChild(this.renderer.domElement);
 
     // Matches the surround, so anything the ground does not reach still reads
@@ -108,7 +108,10 @@ export class WorldScene {
     sun.position.set(7, 15, 9);
     sun.target.position.set(0, 0, 1);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    // 1024 over a 22-unit shadow box is a 0.021-unit texel — finer than any
+    // crate edge reads at this distance, and a quarter of the memory and fill
+    // cost of 2048 on a phone.
+    sun.shadow.mapSize.set(1024, 1024);
     const box = sun.shadow.camera;
     box.left = -11;
     box.right = 11;
