@@ -30,6 +30,10 @@ export class WorldScene {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.domElement.id = "world";
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // Shadows are the cheapest thing that makes objects look like they are on
+    // the ground rather than floating above a painted floor.
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     document.body.appendChild(this.renderer.domElement);
 
     // Matches the surround, so anything the ground does not reach still reads
@@ -41,7 +45,10 @@ export class WorldScene {
     // rectangle. frameRoom sets position, near and far on every resize.
     this.camera = new THREE.PerspectiveCamera(22, 1, 1, 100);
 
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x444466, 1.2));
+    // Hemisphere fills the shadows with sky colour so they are not black;
+    // the directional light is what actually shapes anything.
+    this.scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x6a7a55, 1.5));
+    this.addSun();
 
     this.addSurround();
     this.scene.add(new Scenery().root);
@@ -50,10 +57,48 @@ export class WorldScene {
     this.scene.add(new ObstacleViews(obstacles).root);
 
     this.archer = new ArcherView(archerGltf);
+    this.castOnly(this.archer.root);
     this.scene.add(this.archer.root);
 
     this.enemies = new EnemyViews(enemyGltf);
+    this.castOnly(this.enemies.root);
     this.scene.add(this.enemies.root);
+  }
+
+  /**
+   * One directional light, angled off-axis so faces that meet at a corner get
+   * different brightness. Its shadow camera is orthographic and sized to the
+   * room plus a margin: every unit it covers costs shadow-map resolution, so
+   * a loose box is a blurry contact shadow.
+   */
+  private addSun(): void {
+    const sun = new THREE.DirectionalLight(0xfff4e0, 2.1);
+    sun.position.set(7, 15, 9);
+    sun.target.position.set(0, 0, 1);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    const box = sun.shadow.camera;
+    box.left = -11;
+    box.right = 11;
+    box.top = 15;
+    box.bottom = -15;
+    box.near = 1;
+    box.far = 45;
+    box.updateProjectionMatrix();
+    // Pushes the shadow off the surface that casts it, so a mesh does not
+    // shade itself in stripes.
+    sun.shadow.bias = -0.0008;
+    sun.shadow.normalBias = 0.02;
+    this.scene.add(sun);
+    this.scene.add(sun.target);
+  }
+
+  /** Skinned meshes cast but do not receive: self-shadowing a rigged mesh
+   *  costs more than it shows at this camera distance. */
+  private castOnly(root: THREE.Object3D): void {
+    root.traverse((node) => {
+      if (node instanceof THREE.Mesh) node.castShadow = true;
+    });
   }
 
   /**
@@ -70,6 +115,7 @@ export class WorldScene {
     surround.rotation.x = -Math.PI / 2;
     // Just under the floor, so the two coplanar planes cannot z-fight.
     surround.position.y = -0.02;
+    surround.receiveShadow = true;
     this.scene.add(surround);
   }
 
@@ -89,6 +135,7 @@ export class WorldScene {
       }),
     );
     floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
     this.scene.add(floor);
   }
 
@@ -107,6 +154,8 @@ export class WorldScene {
         material,
       );
       wall.position.set(x, WALL_HEIGHT / 2, z);
+      wall.castShadow = true;
+      wall.receiveShadow = true;
       this.scene.add(wall);
     }
   }
