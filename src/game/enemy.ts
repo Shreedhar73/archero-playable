@@ -2,6 +2,9 @@ import {
   ENEMY_COUNT,
   ENEMY_DEATH_TIME,
   ENEMY_RADIUS,
+  ENEMY_BACKPEDAL,
+  ENEMY_KITE_BAND,
+  ENEMY_SHOOT_RANGE,
   ENEMY_SPEED,
   PLAYER_RADIUS,
 } from "../config.ts";
@@ -17,7 +20,11 @@ import { flowAt, type Grid } from "./pathfind.ts";
  * to play its Death clip while taking no part in the simulation. `dying`
  * counts that down, and the slot is only handed back when it reaches zero.
  */
+/** Melee closes to touching range; archer stops short and shoots. */
+export type EnemyKind = "melee" | "archer";
+
 export interface Enemy {
+  kind: EnemyKind;
   x: number;
   z: number;
   facing: number;
@@ -39,6 +46,7 @@ export function createEnemies(): Enemy[] {
   const enemies: Enemy[] = [];
   for (let i = 0; i < ENEMY_COUNT; i++) {
     enemies.push({
+      kind: "melee",
       x: 0,
       z: 0,
       facing: 0,
@@ -85,22 +93,52 @@ export function updateEnemies(
     const dx = targetX - enemy.x;
     const dz = targetZ - enemy.z;
     const distance = Math.hypot(dx, dz);
-    if (distance <= contact) {
+    const toPlayerX = distance > 0 ? dx / distance : 0;
+    const toPlayerZ = distance > 0 ? dz / distance : 1;
+
+    // The kinds differ only in the distance they want to be at. Melee pushes
+    // until it is touching. An archer holds a band around its firing range,
+    // advancing when the player is beyond it and backing off when the player
+    // closes inside it.
+    const want = enemy.kind === "archer" ? ENEMY_SHOOT_RANGE : contact;
+    const crowded = enemy.kind === "archer" && distance < want * ENEMY_KITE_BAND;
+
+    if (!crowded && distance <= want) {
       enemy.throttle = 0;
       continue;
     }
 
-    // The field knows the room's shape; the straight line does not. Fall back
-    // to the straight line only where the flood never arrived: the player's
-    // own cell, and anywhere sealed off from it.
-    const flow = flowAt(grid, enemy.x, enemy.z);
-    const dirX = flow.known ? flow.x : dx / distance;
-    const dirZ = flow.known ? flow.z : dz / distance;
+    let dirX: number;
+    let dirZ: number;
+    let speed = ENEMY_SPEED;
 
-    enemy.facing = Math.atan2(dirX, dirZ);
+    if (crowded) {
+      // Straight away from the player, not a reversed flow field: the field
+      // points downhill toward the player, and negating it gives a direction
+      // rather than a route. Backing into a wall is survivable because the
+      // push-out and the room clamp still run below.
+      dirX = -toPlayerX;
+      dirZ = -toPlayerZ;
+      speed *= ENEMY_BACKPEDAL;
+    } else {
+      // The field knows the room's shape; the straight line does not. Fall
+      // back to the straight line only where the flood never arrived: the
+      // player's own cell, and anywhere sealed off from it.
+      const flow = flowAt(grid, enemy.x, enemy.z);
+      dirX = flow.known ? flow.x : toPlayerX;
+      dirZ = flow.known ? flow.z : toPlayerZ;
+    }
+
+    // An archer keeps its bow on the player even while walking backwards.
+    // Melee faces where it is going, because the flow field may be routing it
+    // around a crate and facing the player there would look broken.
+    enemy.facing =
+      enemy.kind === "archer"
+        ? Math.atan2(toPlayerX, toPlayerZ)
+        : Math.atan2(dirX, dirZ);
     enemy.throttle = 1;
-    enemy.x += dirX * ENEMY_SPEED * dt;
-    enemy.z += dirZ * ENEMY_SPEED * dt;
+    enemy.x += dirX * speed * dt;
+    enemy.z += dirZ * speed * dt;
     pushOutOfObstacles(enemy, ENEMY_RADIUS, obstacles);
     clampToRoom(enemy, ENEMY_RADIUS);
   }

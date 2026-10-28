@@ -16,11 +16,27 @@ export const ROOM_DEPTH = 12;
 
 export const PLAYER_RADIUS = 0.3; // units, for collision detection
 
-/** Pool size, decided at boot. Each enemy has x number of draw calls. ( based on glb)
- * so this is a frame-time budget, not a difficuly or performance dial
+/**
+ * Which enemy each spawn is, in order. Two melee and four archers, spread so
+ * the player never faces a melee pair back to back — a literal [melee, melee,
+ * archer, archer, archer, archer] would make the first half of the level a
+ * different game from the second.
  */
+export const ENEMY_KINDS = [
+  "melee",
+  "archer",
+  "archer",
+  "melee",
+  "archer",
+  "archer",
+] as const;
 
-export const ENEMY_COUNT = 6;
+/**
+ * Pool size, and the length of a level: both are "how many enemies exist",
+ * so both come from ENEMY_KINDS rather than being repeated. Adding a kind to
+ * that list is the only edit needed to make a level longer.
+ */
+export const ENEMY_COUNT = ENEMY_KINDS.length;
 
 /** Ememy height of glb is 4.791 untits, archer is 1.832, so we need to scale down enemy */
 export const ENEMY_SCALE = 0.32;
@@ -86,3 +102,28 @@ export const POINTS_TARGET = ENEMIES_TO_KILL * POINTS_PER_KILL;
 export const TUTORIAL_TIMEOUT = 3;
 
 
+/**
+ * The distance an archer enemy tries to hold.
+ *
+ * Deliberately INSIDE the player's FIRE_RANGE of 5. An archer that outranges
+ * the player reads better on paper — advance into danger to answer it — but
+ * the simulation showed what it actually does: a player who stands still can
+ * never reach them, the level never ends, and the ad never reaches its CTA.
+ * Measured at 5.6, four seeds all stalled at 3-4 kills of 6.
+ *
+ * An ad has to be winnable by someone who barely plays. The kinds stay
+ * different because of how they move, not because of who outranges whom.
+ */
+export const ENEMY_SHOOT_RANGE = 4.4;
+
+/**
+ * How far inside its firing range an archer tolerates the player before
+ * backing off, as a fraction of ENEMY_SHOOT_RANGE. A band rather than a
+ * single distance: an exact target makes the enemy jitter across it every
+ * frame, stepping forward and back forever.
+ */
+export const ENEMY_KITE_BAND = 0.78;
+
+/** Retreating is slower than advancing — walking backwards always is, and it
+ *  gives the player a way to close the gap. */
+export const ENEMY_BACKPEDAL = 0.8;
