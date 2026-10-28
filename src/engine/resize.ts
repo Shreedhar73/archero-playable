@@ -1,17 +1,27 @@
 /**
- * Layout bus. Register layout functions here; each runs immediately and again
- * on every resize/orientation change. Game state must never live in a layout
- * function — rotation re-layouts, it never restarts the game.
+ * Layout bus. Each registered function runs immediately and again on every
+ * resize. Layout functions must not hold or construct game state: rotation
+ * re-layouts, it never restarts the game.
  */
+import { device } from "./device.ts";
+
 type LayoutFn = (w: number, h: number) => void;
 
 const fns: LayoutFn[] = [];
 
-export function onResize(fn: LayoutFn): void {
-  fns.push(fn);
-  fn(window.innerWidth, window.innerHeight);
+function size(): [number, number] {
+  return [device.clientWidth, device.clientHeight];
 }
 
-window.addEventListener("resize", () => {
-  for (const fn of fns) fn(window.innerWidth, window.innerHeight);
-});
+export function onResize(fn: LayoutFn): void {
+  fns.push(fn);
+  fn(...size());
+}
+
+// Observe the element, not the window: a media query can resize the frame
+// without a window resize.
+new ResizeObserver(() => {
+  const [w, h] = size();
+  if (w === 0 || h === 0) return;
+  for (const fn of fns) fn(w, h);
+}).observe(device);

@@ -19,12 +19,19 @@
         -webkit-user-select: none;
         -webkit-touch-callout: none;
       }
-      canvas {
+      /* Canvases size against #device: the viewport on a phone, the frame below on desktop. */
+      #device {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        background: #1a1c2c;
+      }
+      #device canvas {
         position: absolute;
         inset: 0;
         display: block;
       }
-      /* three:start — Three.js world canvas below the Pixi UI overlay */
+      /* three:start: world canvas below the Pixi UI overlay */
       #world {
         z-index: 0;
       }
@@ -32,9 +39,35 @@
       #ui {
         z-index: 1;
       }
+
+      /* Desktop shows the creative in a phone frame; touch devices keep the whole screen. */
+      @media (hover: hover) and (pointer: fine) and (min-width: 600px) {
+        body {
+          display: grid;
+          place-items: center;
+          background: radial-gradient(
+            circle at 50% 30%,
+            #3b4152 0%,
+            #22252f 60%,
+            #15161d 100%
+          );
+        }
+
+        #device {
+          position: relative;
+          inset: auto;
+          height: min(94vh, 900px);
+          /* 9:16, matching reference.jpg. */
+          aspect-ratio: 9 / 16;
+          border: 10px solid #0e0f15;
+          border-radius: 42px;
+          box-shadow: 0 24px 70px rgb(0 0 0 / 0.5);
+        }
+      }
     </style>
   </head>
   <body>
+    <div id="device"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
