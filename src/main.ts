@@ -1,5 +1,5 @@
 import { Application } from "pixi.js";
-import { ENEMY_RADIUS } from "./config.ts";
+import { ENEMY_RADIUS, ENEMY_HP, PLAYER_HP } from "./config.ts";
 import { adapter } from "@network";
 import { startLoop } from "./engine/loop.ts";
 import { onResize } from "./engine/resize.ts";
@@ -8,7 +8,9 @@ import { WorldScene } from "./three/world.ts";
 import { createPlayer, movePlayer } from "./game/player.ts";
 import { keyboardDirection } from "./input/keyboard.ts";
 import { Joystick } from "./ui/joystick.ts";
-import { addKills, createState } from "./game/state.ts";
+import { Hud } from "./ui/hud.ts";
+import { HealthBars } from "./ui/healthBars.ts";
+import { addKills, createState, progress } from "./game/state.ts";
 import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
 import { loadArcher, loadEnemy } from "./three/assets.ts";
@@ -26,6 +28,17 @@ import { updateEnemyAttacks, updateShooting } from "./game/combat.ts";
  *
  * CTA: call adapter.cta() from the end card; label is adapter.ctaLabel.
  */
+/**
+ * How high above the floor a health bar is projected from.
+ *
+ * Far above the heads (1.83 for the archer, 1.53 for a scaled robot) because
+ * the camera looks down at 68 degrees: a world-space Y offset only moves
+ * cos(68) = 0.37 of itself up the screen, so clearing a head by a visible gap
+ * costs about three times that gap in world units.
+ */
+const BAR_HEIGHT_PLAYER = 3.4;
+const BAR_HEIGHT_ENEMY = 3.1;
+
 async function boot(): Promise<void> {
   // The network decides when the ad may start (MRAID ready etc.).
   await adapter.ready();
@@ -49,7 +62,12 @@ async function boot(): Promise<void> {
   device.appendChild(app.canvas);
 
   const joystick = new Joystick();
+  const hud = new Hud();
+  // One per enemy, plus the player's at index 0.
+  const bars = new HealthBars(enemies.length + 1);
 
+  app.stage.addChild(hud);
+  app.stage.addChild(bars);
   app.stage.addChild(joystick);
   app.stage.eventMode = "static";
   app.stage.hitArea = app.screen;
@@ -69,6 +87,8 @@ async function boot(): Promise<void> {
     // A fraction, not a pixel offset: this holds its place across aspect
     // ratios, and puts the stick over the play area rather than below it.
     joystick.y = w > h ? h * 0.72 : h * 0.84;
+    hud.layout(w, h, scale);
+    bars.layout(w, h);
     // TODO: re-position UI elements
   });
 
@@ -85,6 +105,7 @@ async function boot(): Promise<void> {
     updateShooting(player, enemies, projectiles, dt);
     addKills(state, updateProjectiles(projectiles, enemies, obstacles, dt));
     if (player.hp <= 0) endRun(state);
+    hud.update(state.points, progress(state));
     world.syncPlayer(player.x, player.z, player.facing, player.throttle);
     for (let i = 0; i < enemies.length; i++) {
       const ene = enemies[i];
@@ -93,6 +114,24 @@ async function boot(): Promise<void> {
     for (let i = 0; i < projectiles.length; i++) {
       world.syncArrow(i, projectiles[i]);
     }
+    // Floating bars live in Pixi but follow entities in the Three scene, so
+    // each position is projected through the camera. project() returns a
+    // shared object: read it before the next call.
+    const head = world.project(player.x, BAR_HEIGHT_PLAYER, player.z);
+    bars.set(0, head.x, head.y, player.hp / PLAYER_HP, head.onScreen);
+    for (let i = 0; i < enemies.length; i++) {
+      const enemy = enemies[i];
+      const over = world.project(enemy.x, BAR_HEIGHT_ENEMY, enemy.z);
+      const standing = enemy.alive && enemy.dying === 0;
+      bars.set(
+        i + 1,
+        over.x,
+        over.y,
+        enemy.hp / ENEMY_HP,
+        standing && over.onScreen,
+      );
+    }
+
     world.update(dt);
     world.render();
   });
