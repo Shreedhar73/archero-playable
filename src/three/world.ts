@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { ROOM_SIZE } from "../config.ts";
 import { ArcherView } from "./archer.ts";
 import { type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { EnemyViews } from "./enemy.ts";
+import type { Enemy } from "../game/enemy.ts";
 
 /**
  * Three.js world boot: renderer, camera, light. Owns the #world canvas,
@@ -12,8 +14,9 @@ export class WorldScene {
   readonly camera: THREE.PerspectiveCamera;
   readonly renderer: THREE.WebGLRenderer;
   private readonly archer: ArcherView;
+  private readonly enemies: EnemyViews;
 
-  constructor(archerGltf: GLTF) {
+  constructor(archerGltf: GLTF, enemyGltf: GLTF) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.domElement.id = "world";
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -36,6 +39,8 @@ export class WorldScene {
 
     this.archer = new ArcherView(archerGltf);
     this.scene.add(this.archer.root);
+    this.enemies = new EnemyViews(enemyGltf);
+    this.scene.add(this.enemies.root);
 
     const grid = new THREE.GridHelper(ROOM_SIZE, ROOM_SIZE, 0x2f5a28, 0x2f5a28);
     grid.position.y = 0.01; // avoid z-fighting with floor
@@ -45,6 +50,10 @@ export class WorldScene {
   /** Sync the player mesh position with the game state. */
   syncPlayer(x: number, z: number, facing: number, throttle: number): void {
     this.archer.sync(x, z, facing, throttle);
+  }
+
+  syncEnemy(index: number, enemy: Enemy): void {
+    this.enemies.sync(index, enemy);
   }
 
   resize(w: number, h: number): void {
@@ -60,5 +69,6 @@ export class WorldScene {
   /** advances anumation. Separate from render so loop's phase stays visible */
   update(dt: number): void {
     this.archer.advance(dt);
+    this.enemies.advance(dt);
   }
 }

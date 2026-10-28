@@ -7,7 +7,8 @@ import { createPlayer, movePlayer } from "./game/player.ts";
 import { keyboardDirection } from "./input/keyboard.ts";
 import { Joystick } from "./ui/joystick.ts";
 import { clamp } from "./engine/math.ts";
-import { loadArcher } from "./three/assets.ts";
+import { loadArcher, loadEnemy } from "./three/assets.ts";
+import { createEnemies, updateEnemies } from "./game/enemy.ts";
 
 /**
  * Composition root. Two stacked canvases: Three.js world (#world) below,
@@ -19,11 +20,20 @@ import { loadArcher } from "./three/assets.ts";
 async function boot(): Promise<void> {
   // The network decides when the ad may start (MRAID ready etc.).
   await adapter.ready();
-  const archer = await loadArcher();
+  const [archer, enemy] = await Promise.all([loadArcher(), loadEnemy()]);
+  const enemies = createEnemies();
+  // Temporary: all six parked on a ring so stacking is visible. 5.7 replaces
+  // this with a spawn timer.
+  for (let i = 0; i < enemies.length; i++) {
+    const angle = (i / enemies.length) * Math.PI * 2;
+    enemies[i].alive = true;
+    enemies[i].x = Math.sin(angle) * 4 * Math.random();
+    enemies[i].z = Math.cos(angle) * 4 * Math.random();
+  }
 
   const player = createPlayer();
 
-  const world = new WorldScene(archer);
+  const world = new WorldScene(archer, enemy);
 
   const app = new Application();
   await app.init({ resizeTo: window, backgroundAlpha: 0, antialias: true });
@@ -51,7 +61,12 @@ async function boot(): Promise<void> {
   startLoop(app, (dt) => {
     const dir = joystick.dragging ? joystick.direction : keyboardDirection();
     movePlayer(player, dir.x, dir.z, dt);
+    updateEnemies(enemies, player.x, player.z, dt);
     world.syncPlayer(player.x, player.z, player.facing, player.throttle);
+    for (let i = 0; i < enemies.length; i++) {
+      const ene = enemies[i];
+      world.syncEnemy(i, ene);
+    }
     world.update(dt);
     world.render();
   });
