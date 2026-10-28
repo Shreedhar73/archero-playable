@@ -1,38 +1,47 @@
-import {
-  CylinderGeometry,
-  Group,
-  Mesh,
-  MeshStandardMaterial,
-  Object3D,
-} from "three";
+import { Group, Mesh, MeshStandardMaterial, Object3D } from "three";
+import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { PROJECTILE_COUNT } from "../config.ts";
 import type { Projectile } from "../game/projectiles.ts";
 
-/** Arrows fly flat, a little above the floor so they read against the grass. */
-const FLIGHT_HEIGHT = 0.55;
-const LENGTH = 0.5;
+/** Bow height on a 1.83-unit archer. At 0.55 the arrows left from the knees. */
+const FLIGHT_HEIGHT = 1.05;
+
+/** Source mesh is 0.403 long on Z; this brings it to roughly half a unit. */
+const SCALE = 1.3;
+
 
 /**
- * One mesh per pool slot, built at boot and hidden rather than removed.
- * Geometry and material are shared across all of them — the slots are
- * identical, which is exactly the case geometry sharing exists for.
+ * One clone per pool slot, built at boot and hidden rather than removed.
+ *
+ * Object3D.clone() is correct here, unlike the enemies: the arrow is a plain
+ * mesh with no skeleton, so the clones share geometry and material and own
+ * nothing but a transform.
  */
 export class ArrowViews {
   readonly root = new Group();
   private readonly views: Object3D[] = [];
 
-  constructor() {
-    // Built lying along +Z so rotation.y maps straight onto flight direction.
-    const geometry = new CylinderGeometry(0.035, 0.015, LENGTH, 5);
-    geometry.rotateX(Math.PI / 2);
-    const material = new MeshStandardMaterial({ color: 0xf2e2b0 });
+  constructor(gltf: GLTF) {
+    // Shared across every clone, like the cylinder's was: the slots are
+    // identical, which is the case material sharing exists for.
+    const material = new MeshStandardMaterial({
+      color: 0xf2e2b0,
+      metalness: 0,
+      roughness: 0.6,
+    });
 
     for (let i = 0; i < PROJECTILE_COUNT; i++) {
-      const mesh = new Mesh(geometry, material);
-      mesh.visible = false;
-      mesh.castShadow = true;
-      this.views.push(mesh);
-      this.root.add(mesh);
+      const view = gltf.scene.clone();
+      view.scale.setScalar(SCALE);
+      view.visible = false;
+      view.traverse((node) => {
+        node.castShadow = true;
+      });
+      view.traverse((node) => {
+        if (node instanceof Mesh) node.material = material;
+      });
+      this.views.push(view);
+      this.root.add(view);
     }
   }
 

@@ -7,6 +7,7 @@ import {
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import archerUrl from "../../assets/archer_playable.glb";
 import enemyURL from "../../assets/enemy.glb";
+import arrowUrl from "../../assets/arrow.glb";
 
 /**
  * Every model is EXT_meshopt_compression, so the decoder is not optional —
@@ -29,3 +30,10 @@ export function loadArcher(): Promise<GLTF> {
 export function loadEnemy(): Promise<GLTF> {
   return loader.loadAsync(enemyURL);
 }
+
+
+/** Arrow prop from the client's mesh set: 1.6 KB after the pipeline. */
+export function loadArrow(): Promise<GLTF> {
+  return loader.loadAsync(arrowUrl);
+}
+

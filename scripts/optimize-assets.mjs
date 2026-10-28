@@ -50,6 +50,9 @@ const FINGER = /Hand(Thumb|Index|Middle|Ring|Pinky)\d|Finger\d/;
 /** Only these clips are reachable from a game state. */
 const KEEP_CLIPS = {
   "enemy.glb": ["Idle", "Running", "Punch", "Death"],
+  // The arrow: a static single mesh, no rig and no clips. It still goes
+  // through the pipeline for meshopt and texture compression.
+  "arrow.glb": [],
 };
 
 function dropClips(doc, keep) {
@@ -157,7 +160,7 @@ async function optimize(name) {
   console.log(
     `${name}: ${before} -> ${after} B  (${(after / before * 100).toFixed(0)}%)  ` +
       `base64 ${b64(before)} -> ${b64(after)} MB  ` +
-      `[clips kept ${KEEP_CLIPS[name].join("/")}, -${fingers} finger channels, ` +
+      `[clips kept ${KEEP_CLIPS[name].join("/") || "none"}, -${fingers} finger channels, ` +
       `-${orphans} orphan samplers, -${uvs} uv sets, -${normals} normal maps]`,
   );
   return after;

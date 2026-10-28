@@ -15,7 +15,7 @@ import { EndCard } from "./ui/endCard.ts";
 import { TutorialHand } from "./ui/tutorialHand.ts";
 import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
-import { loadArcher, loadEnemy } from "./three/assets.ts";
+import { loadArcher, loadArrow, loadEnemy } from "./three/assets.ts";
 import { createEnemies, separateEnemies, updateEnemies } from "./game/enemy.ts";
 import { createSpawner, updateSpawner } from "./game/spawner.ts";
 import { createObstacles } from "./game/obstacles.ts";
@@ -44,7 +44,11 @@ const BAR_HEIGHT_ENEMY = 3.1;
 async function boot(): Promise<void> {
   // The network decides when the ad may start (MRAID ready etc.).
   await adapter.ready();
-  const [archer, enemy] = await Promise.all([loadArcher(), loadEnemy()]);
+  const [archer, enemy, arrow] = await Promise.all([
+    loadArcher(),
+    loadEnemy(),
+    loadArrow(),
+  ]);
   const enemies = createEnemies();
   const spawner = createSpawner();
   const projectiles = createProjectiles();
@@ -56,7 +60,7 @@ async function boot(): Promise<void> {
   // anything through a gap it cannot fit through.
   const grid = createGrid(obstacles, ENEMY_RADIUS);
 
-  const world = new WorldScene(archer, enemy, obstacles);
+  const world = new WorldScene({ archer, enemy, arrow }, obstacles);
 
   const app = new Application();
   await app.init({ resizeTo: device, backgroundAlpha: 0, antialias: true });
