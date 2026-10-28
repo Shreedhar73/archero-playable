@@ -56,10 +56,16 @@ async function boot(): Promise<void> {
     world.resize(w, h);
     // Thumb-sized on a phone, not absurd on a desktop. Based on the shorter
     // side, so rotating changes where the joystick is, never how big.
-    const scale = clamp(Math.min(w, h) / 800, 0.6, 1.2);
+    // Ring is 70 units wide, and reference.jpg puts it at ~19% of screen
+    // width. Driven by the shorter side so rotating moves it, never resizes it.
+    const scale = clamp(Math.min(w, h) / 420, 0.85, 1.5);
     joystick.scale.set(scale);
-    joystick.x = w / 2;
-    joystick.y = h - 110 * scale; // 110 is the distance from the bottom of the screen to the center of the joystick, in pixels
+    // Portrait: thumb-centre, below the room. Landscape: bottom-left, because
+    // a centred stick there lands in the middle of the arena, on the archer.
+    joystick.x = w > h ? w * 0.18 : w / 2;
+    // A fraction, not a pixel offset: this holds its place across aspect
+    // ratios, and puts the stick over the play area rather than below it.
+    joystick.y = w > h ? h * 0.72 : h * 0.84;
     // TODO: re-position UI elements
   });
 
