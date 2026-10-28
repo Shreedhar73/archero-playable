@@ -2,6 +2,9 @@
 
 Playable-ad project generated from [create-playable](../create-playable).
 
+Live build: <https://shreedhar73.github.io/archero-playable/> - the generic
+single HTML file, deployed from `main` by `.github/workflows/pages.yml`.
+
 ## Stack
 
 - TypeScript + Vite + `vite-plugin-singlefile`: everything inlined into one
