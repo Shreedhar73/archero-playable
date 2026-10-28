@@ -10,6 +10,7 @@ import { clamp } from "./engine/math.ts";
 import { loadArcher, loadEnemy } from "./three/assets.ts";
 import { createEnemies, separateEnemies, updateEnemies } from "./game/enemy.ts";
 import { createSpawner, updateSpawner } from "./game/spawner.ts";
+import { createObstacles } from "./game/obstacles.ts";
 
 /**
  * Composition root. Two stacked canvases: Three.js world (#world) below,
@@ -26,8 +27,9 @@ async function boot(): Promise<void> {
   const spawner = createSpawner();
 
   const player = createPlayer();
+  const obstacles = createObstacles();
 
-  const world = new WorldScene(archer, enemy);
+  const world = new WorldScene(archer, enemy, obstacles);
 
   const app = new Application();
   await app.init({ resizeTo: window, backgroundAlpha: 0, antialias: true });

@@ -7,6 +7,8 @@ import type { Enemy } from "../game/enemy.ts";
 import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
 import { frameRoom } from "./camera.ts";
 import { checkerTexture } from "./textures.ts";
+import type { Obstacle } from "../game/obstacles.ts";
+import { ObstacleViews } from "./obstacles.ts";
 
 /** Visual only. clampToRoom is what actually stops a body at the wall. */
 const WALL_HEIGHT = 0.7;
@@ -23,7 +25,7 @@ export class WorldScene {
   private readonly archer: ArcherView;
   private readonly enemies: EnemyViews;
 
-  constructor(archerGltf: GLTF, enemyGltf: GLTF) {
+  constructor(archerGltf: GLTF, enemyGltf: GLTF, obstacles: Obstacle[]) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.domElement.id = "world";
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -43,6 +45,7 @@ export class WorldScene {
     this.addSurround();
     this.addFloor();
     this.addWalls();
+    this.scene.add(new ObstacleViews(obstacles).root);
 
     this.archer = new ArcherView(archerGltf);
     this.scene.add(this.archer.root);
@@ -75,7 +78,12 @@ export class WorldScene {
       new THREE.MeshStandardMaterial({
         // Low contrast, as in the reference: the checker is a scale cue, not a
         // pattern competing with the characters.
-        map: checkerTexture("#6fb04a", "#68a844", ROOM_WIDTH / 2, ROOM_DEPTH / 2),
+        map: checkerTexture(
+          "#6fb04a",
+          "#68a844",
+          ROOM_WIDTH / 2,
+          ROOM_DEPTH / 2,
+        ),
       }),
     );
     floor.rotation.x = -Math.PI / 2;
