@@ -14,6 +14,16 @@ import type { Projectile } from "../game/projectiles.ts";
 import type { Obstacle } from "../game/obstacles.ts";
 import { ObstacleViews } from "./obstacles.ts";
 
+/** A world point in overlay pixels, plus whether it is in front of the camera. */
+export interface Projected {
+  x: number;
+  y: number;
+  onScreen: boolean;
+}
+
+/** Reused: project() runs once per entity per frame. */
+const projected: Projected = { x: 0, y: 0, onScreen: false };
+
 /** Visual only. clampToRoom is what actually stops a body at the wall. */
 const WALL_HEIGHT = 0.7;
 const WALL_THICKNESS = 0.3;
@@ -29,6 +39,9 @@ export class WorldScene {
   private readonly archer: ArcherView;
   private readonly enemies: EnemyViews;
   private readonly arrows = new ArrowViews();
+  private screenW = 1;
+  private screenH = 1;
+  private readonly point = new THREE.Vector3();
 
   constructor(archerGltf: GLTF, enemyGltf: GLTF, obstacles: Obstacle[]) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -179,7 +192,29 @@ export class WorldScene {
     this.arrows.sync(index, arrow);
   }
 
+  /**
+   * A world point in CSS pixels, for positioning Pixi over the 3D scene.
+   *
+   * project() runs the point through the camera's view and projection
+   * matrices — the same arithmetic the vertex shader does — leaving
+   * normalised device coordinates from -1 to +1. NDC has +Y up; screens and
+   * Pixi have +Y down, hence the negation.
+   *
+   * `onScreen` is false behind the camera, where perspective division by a
+   * negative depth still yields plausible-looking coordinates on the wrong
+   * side of the screen.
+   */
+  project(x: number, y: number, z: number): Projected {
+    this.point.set(x, y, z).project(this.camera);
+    projected.x = (this.point.x * 0.5 + 0.5) * this.screenW;
+    projected.y = (-this.point.y * 0.5 + 0.5) * this.screenH;
+    projected.onScreen = this.point.z < 1;
+    return projected;
+  }
+
   resize(w: number, h: number): void {
+    this.screenW = w;
+    this.screenH = h;
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     frameRoom(this.camera);
