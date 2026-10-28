@@ -11,10 +11,11 @@
     "convert": "node scripts/fbx-to-glb.mjs --all",
     "archer": "npm run convert && node scripts/build-playable.mjs",
     "assets:check": "node scripts/check-assets.mjs assets/archer_playable.glb && node scripts/check-assets.mjs assets/enemy.glb",
-    "build": "npm run check && npm run build:generic",
+    "build": "npm run check && npm run test && npm run build:generic",
     "build:generic": "vite build --mode generic && node scripts/package.mjs generic",
     "preview": "vite preview",
-    "shot": "node scripts/shot.mjs"
+    "shot": "node scripts/shot.mjs",
+    "test": "node tests/sim.ts"
   },
   "dependencies": {
     "pixi.js": "^8.8.1",

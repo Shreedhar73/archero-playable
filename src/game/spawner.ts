@@ -1,6 +1,7 @@
 import {
   ENEMY_RADIUS,
   ENEMIES_TO_KILL,
+  ENEMY_KINDS,
   ENEMY_HP,
   ROOM_DEPTH,
   ROOM_WIDTH,
@@ -15,10 +16,14 @@ import type { Enemy } from "./enemy.ts";
 export interface Spawner {
   cooldown: number;
   spawned: number;
+  /** Injected so a test can seed it. Math.random cannot be reproduced, which
+   *  makes a headless simulation useless as a regression test: same frames,
+   *  different positions, every run. */
+  random: () => number;
 }
 
-export function createSpawner(): Spawner {
-  return { cooldown: SPAWN_INTERVAL, spawned: 0 };
+export function createSpawner(random: () => number = Math.random): Spawner {
+  return { cooldown: SPAWN_INTERVAL, spawned: 0, random };
 }
 
 /** First free slot ( dead or start), on null when every one is on play. */
@@ -34,15 +39,22 @@ function freeSlot(enemies: Enemy[]): Enemy | null {
 
 /** Spawsn the enemy at far edge. The player enters at bottom and the room fills from the top. */
 
-function placeAtEdge(enemy: Enemy): void {
+function placeAtEdge(
+  enemy: Enemy,
+  random: () => number,
+  index: number,
+): void {
   const halfX = ROOM_WIDTH / 2 - ENEMY_RADIUS;
 
-  enemy.x = (Math.random() * 2 - 1) * halfX;
+  enemy.x = (random() * 2 - 1) * halfX;
   enemy.z = -(ROOM_DEPTH / 2 - ENEMY_RADIUS);
 
   enemy.facing = 0;
   enemy.throttle = 0;
   enemy.alive = true;
+  // Kind comes from the spawn order, not the pool slot: a slot is reused
+  // and would otherwise inherit whatever died in it.
+  enemy.kind = ENEMY_KINDS[index % ENEMY_KINDS.length];
   // Every field, not just the interesting ones: this slot held a corpse.
   enemy.hp = ENEMY_HP;
   enemy.dying = 0;
@@ -57,7 +69,7 @@ export function updateSpawner(
   dt: number,
 ): void {
   // A level is exactly ENEMIES_TO_KILL enemies. Once they have all been
-  // sent, the spawner is done - the level ends when the last one dies.
+  // sent, the spawner is done — the level ends when the last one dies.
   if (spawner.spawned >= ENEMIES_TO_KILL) return;
 
   spawner.cooldown -= dt;
@@ -68,7 +80,7 @@ export function updateSpawner(
     spawner.cooldown = 0;
     return;
   }
-  placeAtEdge(enemy);
+  placeAtEdge(enemy, spawner.random, spawner.spawned);
   spawner.spawned += 1;
   spawner.cooldown = SPAWN_INTERVAL;
 }
