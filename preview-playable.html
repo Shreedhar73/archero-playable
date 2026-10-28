@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>archer_playable.glb — clip check</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #1b1f24;
+        color: #cfd6dd;
+        font: 13px/1.4 ui-monospace, monospace;
+      }
+      canvas {
+        display: block;
+      }
+      #labels {
+        position: fixed;
+        top: 8px;
+        left: 0;
+        width: 100%;
+        display: flex;
+      }
+      #labels span {
+        flex: 1;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="labels"></div>
+    <script type="module">
+      // Throwaway harness: renders one copy of the built GLB per clip, each
+      // held at a frame worth looking at, so a screenshot shows whether the
+      // retargeted poses are right. Not part of the game.
+      import * as THREE from "three";
+      import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+      // SkeletonUtils.clone is the only correct way to copy a skinned mesh:
+      // Object3D.clone shares the skeleton, so every copy would show the pose
+      // of whichever mixer ran last.
+      import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
+
+      const params = new URLSearchParams(location.search);
+      const CLIPS = params.has("clips")
+        ? params
+            .get("clips")
+            .split(",")
+            .map((entry) => {
+              const [name, at] = entry.split("@");
+              return { name, at: Number(at), under: params.get("under") };
+            })
+        : [
+            { name: "Idle", at: 1.0 },
+            { name: "Run", at: 0.35 },
+            { name: "Shoot", at: 0.22 },
+            { name: "Death", at: 2.2 },
+          ];
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x1b1f24);
+      document.body.append(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 2.2));
+      const sun = new THREE.DirectionalLight(0xffffff, 2.0);
+      sun.position.set(2, 4, 3);
+      scene.add(sun);
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(20, 20),
+        new THREE.MeshStandardMaterial({ color: 0x2c333b }),
+      );
+      floor.rotation.x = -Math.PI / 2;
+      scene.add(floor);
+
+      const camera = new THREE.PerspectiveCamera(
+        32,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        50,
+      );
+      camera.position.set(0, 1.5, Number(params.get("dist") ?? 6.2));
+      camera.lookAt(0, 0.85, 0);
+
+      const gltf = await new GLTFLoader().loadAsync(
+        params.get("glb") ?? "/assets/archer_playable.glb",
+      );
+      const labels = document.getElementById("labels");
+
+      CLIPS.forEach((entry, index) => {
+        const copy = clone(gltf.scene);
+        copy.position.x = (index - (CLIPS.length - 1) / 2) * 1.1;
+        scene.add(copy);
+        const mixer = new THREE.AnimationMixer(copy);
+        // `under` layers the clip over a base one, which is how a
+        // lower-body-free clip is meant to be played.
+        if (entry.under) {
+          mixer.clipAction(THREE.AnimationClip.findByName(gltf.animations, entry.under)).play();
+        }
+        mixer.clipAction(THREE.AnimationClip.findByName(gltf.animations, entry.name)).play();
+        mixer.setTime(entry.at);
+        const label = document.createElement("span");
+        label.textContent = entry.under
+          ? `${entry.under}+${entry.name} @ ${entry.at}s`
+          : `${entry.name} @ ${entry.at}s`;
+        labels.append(label);
+      });
+
+      renderer.render(scene, camera);
+      window.__ready = true;
+    </script>
+  </body>
+</html>

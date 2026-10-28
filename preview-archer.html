@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ArcherView — pose check</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #1b1f24;
+        color: #cfd6dd;
+        font: 13px/1.4 ui-monospace, monospace;
+      }
+      canvas {
+        display: block;
+      }
+      #labels {
+        position: fixed;
+        top: 8px;
+        left: 0;
+        width: 100%;
+        display: flex;
+      }
+      #labels span {
+        flex: 1;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="labels"></div>
+    <script type="module">
+      // Close-up of the real ArcherView — the game's own attach and blending
+      // code, not a copy of it — so bow placement and clip weights can be
+      // checked without squinting at a top-down 420px screenshot.
+      import * as THREE from "three";
+      import { ArcherView } from "/src/three/archer.ts";
+      import { loadArcher } from "/src/three/assets.ts";
+
+      const params = new URLSearchParams(location.search);
+      const POSES = [
+        { label: "idle", throttle: 0, shooting: 0, hp: 100, at: 1.0 },
+        { label: "run", throttle: 1, shooting: 0, hp: 100, at: 0.35 },
+        { label: "shoot", throttle: 0, shooting: 0.3, hp: 100, at: 0.25 },
+        { label: "dead", throttle: 0, shooting: 0, hp: 0, at: 2.2 },
+      ];
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x1b1f24);
+      document.body.append(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x404050, 2.4));
+      const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+      sun.position.set(2, 4, 3);
+      scene.add(sun);
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(20, 20),
+        new THREE.MeshStandardMaterial({ color: 0x2c333b }),
+      );
+      floor.rotation.x = -Math.PI / 2;
+      scene.add(floor);
+
+      const camera = new THREE.PerspectiveCamera(
+        32,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        60,
+      );
+      // Default is a straight-on view; `top` matches the game's 68-degree
+      // camera, which is the angle the bow tilt was tuned for.
+      const top = params.has("top");
+      camera.position.set(0, top ? 4.6 : 1.5, top ? 2.6 : 4.4);
+      camera.lookAt(0, top ? 0.6 : 0.95, 0);
+
+      const labels = document.getElementById("labels");
+      for (const [index, pose] of POSES.entries()) {
+        // One model per pose: ArcherView mutates what it is given.
+        const view = new ArcherView(await loadArcher());
+        view.root.position.x = (index - (POSES.length - 1) / 2) * 1.15;
+        scene.add(view.root);
+        view.sync({
+          x: view.root.position.x,
+          z: 0,
+          facing: Number(params.get("facing") ?? 0),
+          throttle: pose.throttle,
+          hp: pose.hp,
+          fireCooldown: 0,
+          shooting: pose.shooting,
+        });
+        // advance() drives the mixer; stepping once to `at` lands on the frame
+        // worth looking at.
+        view.advance(pose.at);
+        const label = document.createElement("span");
+        label.textContent = pose.label;
+        labels.append(label);
+      }
+
+      renderer.render(scene, camera);
+    </script>
+  </body>
+</html>
