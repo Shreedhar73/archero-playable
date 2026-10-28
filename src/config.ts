@@ -10,8 +10,8 @@ export const STORE_URLS = {
 export const PLAYER_SPEED = 3; // units per second
 
 /**Room is tall rectangle */
-export const ROOM_WIDTH = 9;
-export const ROOM_DEPTH = 12;
+export const ROOM_WIDTH = 12;
+export const ROOM_DEPTH = 13;
 
 export const PLAYER_RADIUS = 0.3; // units, for collision detection
 
