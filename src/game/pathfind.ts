@@ -2,15 +2,9 @@ import { CELL_SIZE, ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
 import type { Obstacle } from "./obstacles.ts";
 
 /**
- * A breadth-first flow field over the room.
- *
- * One solve serves every enemy: BFS from the player's cell labels each cell
- * with its distance, and each cell then stores a unit vector pointing at its
- * cheapest neighbour. An enemy reads the vector under its feet, so N enemies
- * cost one solve rather than N path searches.
- *
- * Everything is allocated once. The queue, the distances and the field are
- * reused on every solve, because this runs whenever the player changes cell.
+ * BFS flow field from the player's cell. One solve serves every enemy: each
+ * cell stores a unit vector towards its cheapest neighbour. All buffers are
+ * allocated once and reused.
  */
 export interface Grid {
   readonly cols: number;
@@ -21,7 +15,7 @@ export interface Grid {
   readonly dist: Int32Array;
   readonly flowX: Float32Array;
   readonly flowZ: Float32Array;
-  /** Reused BFS frontier, so a solve allocates nothing. */
+  /** Reused BFS frontier. */
   readonly queue: Int32Array;
   /** Cell the current field was solved for; -1 before the first solve. */
   solvedFor: number;
@@ -55,9 +49,8 @@ export function createGrid(obstacles: Obstacle[], radius: number): Grid {
     solvedFor: -1,
   };
 
-  // A cell is blocked if a body of this radius standing at its centre would
-  // overlap a crate. Planning with the body's size baked in is what stops
-  // enemies routing through gaps they cannot physically fit through.
+  // Blocked if a body of this radius at the cell centre would overlap a crate,
+  // so routes never go through gaps the body cannot fit.
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
       const x = cellCentreX(col);
@@ -100,9 +93,8 @@ function clampInt(value: number, size: number): number {
 }
 
 /**
- * Floods out from `target` and rebuilds the field. Returns false and leaves
- * the previous field intact when the target sits in a blocked cell, which
- * happens while the player is being pushed out of a crate.
+ * Rebuilds the field from `target`. Returns false and keeps the old field
+ * when the target is in a blocked cell (the player mid push-out).
  */
 export function solveFlow(grid: Grid, targetX: number, targetZ: number): boolean {
   const start = cellAt(grid, targetX, targetZ);
@@ -130,8 +122,7 @@ export function solveFlow(grid: Grid, targetX: number, targetZ: number): boolean
       const index = nr * grid.cols + nc;
       if (grid.blocked[index] === 1 || grid.dist[index] !== -1) continue;
 
-      // A diagonal step must not cut a corner: both orthogonals have to be
-      // open, or enemies clip through the exact corner of a crate.
+      // No corner cutting: both orthogonals must be open.
       if (dc !== 0 && dr !== 0) {
         if (grid.blocked[row * grid.cols + nc] === 1) continue;
         if (grid.blocked[nr * grid.cols + col] === 1) continue;
@@ -188,13 +179,13 @@ function buildField(grid: Grid): void {
   }
 }
 
-/** Reused so reading the field allocates nothing per enemy per frame. */
+/** Reused return value. */
 const direction = { x: 0, z: 0, known: false };
 
 /**
- * The field's direction under a world position. `known` is false where the
- * flood never arrived — a cell sealed off from the player, or the player's
- * own cell — and the caller decides what to do about it.
+ * Field direction under a world position. Blocked cells are normal (they are
+ * padded by the body radius), so from one the step is towards the best open
+ * neighbour. `known` is false only when sealed off or in the player's own cell.
  */
 export function flowAt(
   grid: Grid,
@@ -202,8 +193,39 @@ export function flowAt(
   z: number,
 ): { x: number; z: number; known: boolean } {
   const index = cellAt(grid, x, z);
-  direction.x = grid.flowX[index];
-  direction.z = grid.flowZ[index];
-  direction.known = grid.dist[index] > 0;
+  if (grid.dist[index] > 0) {
+    direction.x = grid.flowX[index];
+    direction.z = grid.flowZ[index];
+    direction.known = true;
+    return direction;
+  }
+
+  // Blocked or unreached: head for the open neighbour nearest the player.
+  // No corner check here; this is an escape and the push-out handles geometry.
+  const col = index % grid.cols;
+  const row = (index - col) / grid.cols;
+  let bestDist = Number.MAX_SAFE_INTEGER;
+  let bestCol = col;
+  let bestRow = row;
+
+  for (let n = 0; n < NEIGHBOURS.length; n++) {
+    const [dc, dr] = NEIGHBOURS[n];
+    const nc = col + dc;
+    const nr = row + dr;
+    if (nc < 0 || nc >= grid.cols || nr < 0 || nr >= grid.rows) continue;
+
+    const candidate = grid.dist[nr * grid.cols + nc];
+    if (candidate < 0 || candidate >= bestDist) continue;
+    bestDist = candidate;
+    bestCol = nc;
+    bestRow = nr;
+  }
+
+  const dx = bestCol - col;
+  const dz = bestRow - row;
+  const length = Math.hypot(dx, dz);
+  direction.x = length > 0 ? dx / length : 0;
+  direction.z = length > 0 ? dz / length : 0;
+  direction.known = length > 0;
   return direction;
 }

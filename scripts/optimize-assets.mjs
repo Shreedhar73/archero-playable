@@ -51,7 +51,20 @@ const KEEP_CLIPS = {
   // The arrow: a static single mesh, no rig and no clips. It still goes
   // through the pipeline for meshopt and texture compression.
   "arrow.glb": [],
+  // Scenery from the client's mesh set. All three are static props with no
+  // rig, no clips and no textures — the rip carries none, so they are lit by
+  // materials assigned in `src/three/scenery.ts`. The tree is the exception
+  // that matters: its green lives in COLOR_0 and nowhere else, which is why
+  // the prune below keeps attributes for these three.
+  "tree.glb": [],
+  "rock.glb": [],
+  "mushroom.glb": [],
 };
+
+/** Files whose vertex attributes must survive prune. `keepAttributes: false`
+ *  drops anything no material references, and a glTF material cannot say "I
+ *  use vertex colours" — so COLOR_0 looks unused and the tree ships grey. */
+const KEEP_ATTRIBUTES = ["tree.glb"];
 
 async function optimize(name) {
   const src = `${assets}raw/${name}`;
@@ -66,7 +79,10 @@ async function optimize(name) {
 
   await doc.transform(
     // prune first so later passes don't spend work on orphans.
-    prune({ keepAttributes: false, keepLeaves: false }),
+    prune({
+      keepAttributes: KEEP_ATTRIBUTES.includes(name),
+      keepLeaves: false,
+    }),
     dedup(),
     // The dropped UV sets left vertices split for no reason.
     weld(),

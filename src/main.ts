@@ -1,5 +1,11 @@
 import { Application } from "pixi.js";
-import { ENEMY_RADIUS, ENEMY_HP, PLAYER_HP, TUTORIAL_TIMEOUT } from "./config.ts";
+import {
+  ENEMY_RADIUS,
+  ENEMY_HP,
+  PLAYER_HP,
+  ROOM_DEPTH,
+  TUTORIAL_TIMEOUT,
+} from "./config.ts";
 import { adapter } from "@network";
 import { startLoop } from "./engine/loop.ts";
 import { onResize } from "./engine/resize.ts";
@@ -13,10 +19,15 @@ import { HealthBars } from "./ui/healthBars.ts";
 import { addKills, createState, progress } from "./game/state.ts";
 import { EndCard } from "./ui/endCard.ts";
 import { TutorialHand } from "./ui/tutorialHand.ts";
+import { Mist } from "./ui/mist.ts";
 import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
-import { loadArcher, loadArrow, loadEnemy } from "./three/assets.ts";
-import { createEnemies, separateEnemies, updateEnemies } from "./game/enemy.ts";
+import { loadArcher, loadArrow, loadEnemy, loadScenery } from "./three/assets.ts";
+import {
+  createEnemies,
+  separateEnemies,
+  updateEnemies,
+} from "./game/enemy.ts";
 import { createSpawner, updateSpawner } from "./game/spawner.ts";
 import { createObstacles } from "./game/obstacles.ts";
 import { createGrid, solveFlow } from "./game/pathfind.ts";
@@ -44,11 +55,13 @@ const BAR_HEIGHT_ENEMY = 3.1;
 async function boot(): Promise<void> {
   // The network decides when the ad may start (MRAID ready etc.).
   await adapter.ready();
-  const [archer, enemy, arrow] = await Promise.all([
+  const [archer, enemy, arrow, scenery] = await Promise.all([
     loadArcher(),
     loadEnemy(),
     loadArrow(),
+    loadScenery(),
   ]);
+  const [tree, rock, mushroom] = scenery;
   const enemies = createEnemies();
   const spawner = createSpawner();
   const projectiles = createProjectiles();
@@ -60,13 +73,17 @@ async function boot(): Promise<void> {
   // anything through a gap it cannot fit through.
   const grid = createGrid(obstacles, ENEMY_RADIUS);
 
-  const world = new WorldScene({ archer, enemy, arrow }, obstacles);
+  const world = new WorldScene(
+    { archer, enemy, arrow, scenery: { tree, rock, mushroom } },
+    obstacles,
+  );
 
   const app = new Application();
   await app.init({ resizeTo: device, backgroundAlpha: 0, antialias: true });
   app.canvas.id = "ui";
   device.appendChild(app.canvas);
 
+  const mist = new Mist();
   const joystick = new Joystick();
   const hud = new Hud();
   // One per enemy, plus the player's at index 0.
@@ -74,6 +91,8 @@ async function boot(): Promise<void> {
   const endCard = new EndCard();
   const hand = new TutorialHand();
 
+  // First child, so the haze sits over the 3D world and under every widget.
+  app.stage.addChild(mist);
   app.stage.addChild(hud);
   app.stage.addChild(bars);
   app.stage.addChild(joystick);
@@ -109,6 +128,10 @@ async function boot(): Promise<void> {
     // A fraction, not a pixel offset: this holds its place across aspect
     // ratios, and puts the stick over the play area rather than below it.
     joystick.y = w > h ? h * 0.72 : h * 0.84;
+    // The near wall in screen pixels: where the land in front of the arena
+    // starts, and so where the haze starts. project() returns a shared object,
+    // so it is read before anything else can call it.
+    mist.layout(w, h, world.project(0, 0, ROOM_DEPTH / 2).y);
     hud.layout(w, h, scale);
     bars.layout(w, h);
     endCard.layout(w, h);
@@ -132,9 +155,9 @@ async function boot(): Promise<void> {
       solveFlow(grid, player.x, player.z);
       updateSpawner(spawner, enemies, dt);
       updateEnemies(enemies, player.x, player.z, dt, obstacles, grid);
-      separateEnemies(enemies);
-      updateEnemyAttacks(enemies, player, projectiles, dt);
-      updateShooting(player, enemies, projectiles, dt);
+      separateEnemies(enemies, obstacles, dt);
+      updateEnemyAttacks(enemies, player, projectiles, obstacles, dt);
+      updateShooting(player, enemies, projectiles, obstacles, dt);
       addKills(state, updateProjectiles(projectiles, enemies, player, obstacles, dt));
       if (player.hp <= 0) endRun(state);
     } else if (!endCard.visible) {

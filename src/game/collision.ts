@@ -24,8 +24,7 @@ export function pushOutOfObstacles(
       body.z = closestZ + (dz / distance) * radius;
       continue;
     }
-    // No direction to recover: the centre is in the box, so the closest point
-    // is the centre itself. Leave through the nearest face instead.
+    // Centre inside the box: no direction to push along, so exit through the nearest face.
     const outX = box.halfX - Math.abs(body.x - box.x);
     const outZ = box.halfZ - Math.abs(body.z - box.z);
     if (outX < outZ) {
@@ -36,11 +35,7 @@ export function pushOutOfObstacles(
   }
 }
 
-/**
- * Whether a circular body overlaps any box. Same closest-point test as the
- * push-out, but it only answers yes or no — projectiles are destroyed on
- * contact rather than slid along a surface.
- */
+/** Yes/no overlap test for projectiles, which die on contact instead of sliding. */
 export function overlapsObstacle(
   x: number,
   z: number,
@@ -54,4 +49,56 @@ export function overlapsObstacle(
     if (Math.hypot(x - closestX, z - closestZ) < radius) return true;
   }
   return false;
+}
+
+/**
+ * Segment-vs-boxes slab test: boxes grown by the arrow radius, arrow treated
+ * as a point. Slightly conservative at corners, which only costs a shot that
+ * would have grazed a crate.
+ */
+export function clearShot(
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  radius: number,
+  obstacles: Obstacle[],
+): boolean {
+  const dx = toX - fromX;
+  const dz = toZ - fromZ;
+
+  for (let i = 0; i < obstacles.length; i++) {
+    const box = obstacles[i];
+    const minX = box.x - box.halfX - radius;
+    const maxX = box.x + box.halfX + radius;
+    const minZ = box.z - box.halfZ - radius;
+    const maxZ = box.z + box.halfZ + radius;
+
+    // Fractions of the segment, not a ray: a crate behind the target blocks nothing.
+    let near = 0;
+    let far = 1;
+    let blocked = true;
+
+    for (let axis = 0; axis < 2 && blocked; axis++) {
+      const origin = axis === 0 ? fromX : fromZ;
+      const delta = axis === 0 ? dx : dz;
+      const low = axis === 0 ? minX : minZ;
+      const high = axis === 0 ? maxX : maxZ;
+
+      if (Math.abs(delta) < 1e-9) {
+        // Parallel to this slab: wholly inside or wholly outside.
+        if (origin < low || origin > high) blocked = false;
+        continue;
+      }
+
+      const first = (low - origin) / delta;
+      const second = (high - origin) / delta;
+      near = Math.max(near, Math.min(first, second));
+      far = Math.min(far, Math.max(first, second));
+      if (near > far) blocked = false;
+    }
+
+    if (blocked) return false;
+  }
+  return true;
 }

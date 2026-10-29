@@ -1,4 +1,5 @@
 import {
+  ARROW_RADIUS,
   ARROW_SPAWN_OFFSET,
   ENEMY_SHOOT_RANGE,
   ENEMY_SHOT_INTERVAL,
@@ -10,10 +11,12 @@ import {
   PLAYER_RADIUS,
   SHOOT_POSE,
 } from "../config.ts";
+import { clearShot } from "./collision.ts";
 import type { Enemy } from "./enemy.ts";
 import type { Player } from "./player.ts";
 import { fireProjectile, type Projectile } from "./projectiles.ts";
-import { nearestEnemy } from "./targeting.ts";
+import type { Obstacle } from "./obstacles.ts";
+import { nearestVisibleEnemy } from "./targeting.ts";
 
 /** Slightly more than touching, so a swing does not miss on a rounding error. */
 const MELEE_REACH = ENEMY_RADIUS + PLAYER_RADIUS + 0.15;
@@ -31,6 +34,7 @@ export function updateShooting(
   player: Player,
   enemies: Enemy[],
   projectiles: Projectile[],
+  obstacles: Obstacle[],
   dt: number,
 ): void {
   player.fireCooldown -= dt;
@@ -40,7 +44,15 @@ export function updateShooting(
   if (player.throttle > 0) player.shooting = 0;
   if (player.throttle > 0 || player.fireCooldown > 0) return;
 
-  const target = nearestEnemy(enemies, player.x, player.z, FIRE_RANGE);
+  // Nothing in the open: hold the shot rather than feed the crate. Standing
+  // behind cover costing the player their damage is the point of cover.
+  const target = nearestVisibleEnemy(
+    enemies,
+    player.x,
+    player.z,
+    FIRE_RANGE,
+    obstacles,
+  );
   if (target === null) return;
 
   const dx = target.x - player.x;
@@ -77,6 +89,7 @@ export function updateEnemyAttacks(
   enemies: Enemy[],
   player: Player,
   projectiles: Projectile[],
+  obstacles: Obstacle[],
   dt: number,
 ): void {
   for (let i = 0; i < enemies.length; i++) {
@@ -95,14 +108,35 @@ export function updateEnemyAttacks(
       continue;
     }
 
-    enemy.attacking = true;
-    enemy.attackCooldown -= dt;
-
-    // An archer that has stopped walking would otherwise keep whatever facing
-    // it arrived with, and shoot sideways.
     const distance = Math.sqrt(squared);
     const dirX = distance > 0 ? dx / distance : 0;
     const dirZ = distance > 0 ? dz / distance : 1;
+
+    // Same rule as the player's: an archer with a crate in the way holds its
+    // shot. `updateEnemies` is what walks it out from behind the crate, so
+    // this is a pause, not a deadlock — and while it is walking, the facing
+    // belongs to the walk. Turning the body towards the player here as well
+    // is what made a repositioning archer look like it was sliding.
+    const canShoot =
+      enemy.kind !== "archer" ||
+      clearShot(
+        enemy.x + dirX * ARROW_SPAWN_OFFSET,
+        enemy.z + dirZ * ARROW_SPAWN_OFFSET,
+        player.x,
+        player.z,
+        ARROW_RADIUS,
+        obstacles,
+      );
+
+    if (!canShoot) {
+      enemy.attacking = false;
+      continue;
+    }
+
+    enemy.attacking = true;
+    enemy.attackCooldown -= dt;
+    // Standing still and able to act: aim. An enemy that kept whatever facing
+    // it arrived with would shoot sideways.
     enemy.facing = Math.atan2(dirX, dirZ);
 
     if (enemy.attackCooldown > 0) continue;

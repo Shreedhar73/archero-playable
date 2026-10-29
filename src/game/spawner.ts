@@ -9,16 +9,10 @@ import {
 } from "../config.ts";
 import type { Enemy } from "./enemy.ts";
 
-/**
- * Countdown to the next enemy spawn, and how many have been sent so far.
- * Plain state like everything else, so an orientation change cannot reset it.
- */
 export interface Spawner {
   cooldown: number;
   spawned: number;
-  /** Injected so a test can seed it. Math.random cannot be reproduced, which
-   *  makes a headless simulation useless as a regression test: same frames,
-   *  different positions, every run. */
+  /** Injected so the headless test can seed it. */
   random: () => number;
 }
 
@@ -26,8 +20,7 @@ export function createSpawner(random: () => number = Math.random): Spawner {
   return { cooldown: SPAWN_INTERVAL, spawned: 0, random };
 }
 
-/** Index of the first free slot, or -1 when every one is in play. */
-
+/** First free slot, or -1. */
 function freeSlot(enemies: Enemy[]): number {
   for (let i = 0; i < enemies.length; i++) {
     const enemy = enemies[i];
@@ -37,32 +30,55 @@ function freeSlot(enemies: Enemy[]): number {
   return -1;
 }
 
-/** Spawsn the enemy at far edge. The player enters at bottom and the room fills from the top. */
-
+/** Spawns at the far edge; the player enters from the near one. */
 function placeAtEdge(
   enemy: Enemy,
+  enemies: Enemy[],
   random: () => number,
   index: number,
 ): void {
   const halfX = ROOM_WIDTH / 2 - ENEMY_RADIUS;
+  const z = -(ROOM_DEPTH / 2 - ENEMY_RADIUS);
 
-  enemy.x = (random() * 2 - 1) * halfX;
-  enemy.z = -(ROOM_DEPTH / 2 - ENEMY_RADIUS);
+  // Try several x and keep the roomiest, so spawns do not land on each other.
+  let bestX = (random() * 2 - 1) * halfX;
+  let bestGap = -1;
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const x = (random() * 2 - 1) * halfX;
+    let gap = Number.POSITIVE_INFINITY;
+
+    for (let i = 0; i < enemies.length; i++) {
+      const other = enemies[i];
+      if (other === enemy || !other.alive) continue;
+      gap = Math.min(gap, Math.hypot(other.x - x, other.z - z));
+    }
+
+    if (gap > bestGap) {
+      bestGap = gap;
+      bestX = x;
+    }
+    if (gap >= ENEMY_RADIUS * 2) break;
+  }
+
+  enemy.x = bestX;
+  enemy.z = z;
 
   enemy.facing = 0;
   enemy.throttle = 0;
   enemy.alive = true;
-  // Kind comes from the POOL SLOT, not the spawn order. Each slot is one kind
-  // for the whole session, which is what lets the renderer build the right
-  // model and clip set for it once at boot instead of swapping models when
-  // something respawns.
+  // Kind is fixed per slot, not per spawn, so the renderer builds each slot's
+  // model and clips once at boot.
   enemy.kind = ENEMY_KINDS[index % ENEMY_KINDS.length];
-  // Every field, not just the interesting ones: this slot held a corpse.
+  // Reset every field: this slot held a corpse.
   enemy.hp = ENEMY_HP;
   enemy.dying = 0;
   enemy.attackCooldown = 0;
   enemy.attacking = false;
   enemy.hitFlash = 0;
+  // Heading must agree with facing or the first step is a slide.
+  enemy.headingX = Math.sin(enemy.facing);
+  enemy.headingZ = Math.cos(enemy.facing);
 }
 
 export function updateSpawner(
@@ -70,19 +86,18 @@ export function updateSpawner(
   enemies: Enemy[],
   dt: number,
 ): void {
-  // A level is exactly ENEMIES_TO_KILL enemies. Once they have all been
-  // sent, the spawner is done — the level ends when the last one dies.
+  // A level is exactly ENEMIES_TO_KILL enemies.
   if (spawner.spawned >= ENEMIES_TO_KILL) return;
 
   spawner.cooldown -= dt;
   if (spawner.cooldown > 0) return;
   const slot = freeSlot(enemies);
   if (slot === -1) {
-    // pool full cannot spawn at this time
+    // Pool full; retry next frame.
     spawner.cooldown = 0;
     return;
   }
-  placeAtEdge(enemies[slot], spawner.random, slot);
+  placeAtEdge(enemies[slot], enemies, spawner.random, slot);
   spawner.spawned += 1;
   spawner.cooldown = SPAWN_INTERVAL;
 }
