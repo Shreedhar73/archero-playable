@@ -9,7 +9,7 @@ import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
 import { frameRoom } from "./camera.ts";
 import { device } from "../engine/device.ts";
 import { checkerTexture } from "./textures.ts";
-import { Scenery } from "./scenery.ts";
+import { Scenery, type SceneryAssets } from "./scenery.ts";
 import { ArrowViews } from "./arrows.ts";
 import type { Projectile } from "../game/projectiles.ts";
 import type { Obstacle } from "../game/obstacles.ts";
@@ -24,6 +24,7 @@ export interface WorldAssets {
   archer: GLTF;
   enemy: GLTF;
   arrow: GLTF;
+  scenery: SceneryAssets;
 }
 
 /** A world point in overlay pixels, plus whether it is in front of the camera. */
@@ -39,6 +40,22 @@ const projected: Projected = { x: 0, y: 0, onScreen: false };
 /** Visual only. clampToRoom is what actually stops a body at the wall. */
 const WALL_HEIGHT = 0.7;
 const WALL_THICKNESS = 0.3;
+
+/**
+ * How far the arena stands above the land around it, and how far its base
+ * oversails the walls. The reference does not paint the play area onto the
+ * ground — it raises it, so the rim catches light along its top and drops a
+ * shadow on the grass outside. Nothing in `src/game/` knows about either
+ * number: the floor is still the y = 0 plane every body walks on.
+ */
+const PLINTH = 0.45;
+const RIM = 0.35;
+
+/** Olive, not pale: in the reference everything outside the arena sits in
+ *  tree shade and reads darker than the grass inside. The one pale area is
+ *  the near mist, and that is drawn in Pixi over the top (`src/ui/mist.ts`),
+ *  because fog fades by distance and the mist is at the near edge. */
+const SURROUND = 0x5f7f40;
 
 /**
  * Three.js world boot: renderer, camera, light. Owns the #world canvas,
@@ -67,7 +84,7 @@ export class WorldScene {
 
     // Matches the surround, so anything the ground does not reach still reads
     // as distance rather than as a letterbox.
-    this.scene.background = new THREE.Color(0x93b579);
+    this.scene.background = new THREE.Color(SURROUND);
 
     // Long lens, not a wide one: a narrow FOV from far away keeps the room's
     // near and far edges nearly the same width, so the arena reads as a
@@ -80,7 +97,8 @@ export class WorldScene {
     this.addSun();
 
     this.addSurround();
-    this.scene.add(new Scenery().root);
+    this.scene.add(new Scenery(assets.scenery, -PLINTH).root);
+    this.addPlinth();
     this.addFloor();
     this.addWalls();
     this.scene.add(new ObstacleViews(obstacles).root);
@@ -129,29 +147,60 @@ export class WorldScene {
   }
 
   /** Skinned meshes cast but do not receive: self-shadowing a rigged mesh
-   *  costs more than it shows at this camera distance. */
+   *  costs more than it shows at this camera distance.
+   *
+   *  Unlit meshes are skipped. A MeshBasicMaterial here means an effect lying
+   *  on the floor — the player's marker ring — and a decal that casts a
+   *  shadow stops being a decal. */
   private castOnly(root: THREE.Object3D): void {
     root.traverse((node) => {
-      if (node instanceof THREE.Mesh) node.castShadow = true;
+      if (!(node instanceof THREE.Mesh)) return;
+      if (node.material instanceof THREE.MeshBasicMaterial) return;
+      node.castShadow = true;
     });
   }
 
   /**
    * Ground outside the walls. A 9x12 room cannot fill a 9:19 phone screen, so
-   * what surrounds it has to be land rather than void. Flat and paler than the
-   * arena, as in the reference: the checker marks where play happens, so
-   * checkering the outside too would say the opposite.
+   * what surrounds it has to be land rather than void. Flat and darker than
+   * the arena, as in the reference: the checker marks where play happens, so
+   * checkering the outside too would say the opposite, and lighting it more
+   * brightly would make the arena read as a hole.
    */
   private addSurround(): void {
     const surround = new THREE.Mesh(
       new THREE.PlaneGeometry(ROOM_WIDTH * 6, ROOM_DEPTH * 6),
-      new THREE.MeshStandardMaterial({ color: 0x93b579 }),
+      new THREE.MeshStandardMaterial({ color: SURROUND }),
     );
     surround.rotation.x = -Math.PI / 2;
-    // Just under the floor, so the two coplanar planes cannot z-fight.
-    surround.position.y = -0.02;
+    // A plinth's depth below the floor: the arena stands on the land, it is
+    // not flush with it.
+    surround.position.y = -PLINTH;
     surround.receiveShadow = true;
     this.scene.add(surround);
+  }
+
+  /**
+   * The block the arena stands on. Oversails the walls by RIM so its edge is
+   * visible from above as a lip, and casts onto the surround — that contact
+   * shadow is most of what makes the arena look raised rather than painted.
+   */
+  private addPlinth(): void {
+    const plinth = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        ROOM_WIDTH + RIM * 2,
+        PLINTH,
+        ROOM_DEPTH + RIM * 2,
+      ),
+      new THREE.MeshStandardMaterial({ color: 0x6d5a3c }),
+    );
+    // A hair under the floor plane rather than flush with it: two coplanar
+    // surfaces at y = 0 z-fight, and the plinth wins often enough to paint
+    // the whole arena brown.
+    plinth.position.y = -PLINTH / 2 - 0.01;
+    plinth.castShadow = true;
+    plinth.receiveShadow = true;
+    this.scene.add(plinth);
   }
 
   /** One checker square per world unit, which is why the GridHelper is gone. */
@@ -162,8 +211,8 @@ export class WorldScene {
         // Low contrast, as in the reference: the checker is a scale cue, not a
         // pattern competing with the characters.
         map: checkerTexture(
-          "#6fb04a",
-          "#68a844",
+          "#8cc63f",
+          "#83bd3a",
           ROOM_WIDTH / 2,
           ROOM_DEPTH / 2,
         ),
@@ -176,7 +225,9 @@ export class WorldScene {
 
   /** Four boxes on the room's edges: x, z, sizeX, sizeZ. */
   private addWalls(): void {
-    const material = new THREE.MeshStandardMaterial({ color: 0x8a7a5c });
+    // Warm tan, lighter than the plinth below it, so the rim reads as a lit
+    // top edge rather than as more of the same block.
+    const material = new THREE.MeshStandardMaterial({ color: 0xa89066 });
     const walls: [number, number, number, number][] = [
       [0, -ROOM_DEPTH / 2, ROOM_WIDTH + WALL_THICKNESS, WALL_THICKNESS],
       [0, ROOM_DEPTH / 2, ROOM_WIDTH + WALL_THICKNESS, WALL_THICKNESS],
@@ -236,6 +287,11 @@ export class WorldScene {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     frameRoom(this.camera);
+    // project() reads matrixWorldInverse, which the renderer refreshes at
+    // render time. Layout callbacks run before the first frame, so without
+    // this the first projection of the frame is against a stale camera — and
+    // at boot that is the identity, which puts the near wall nowhere.
+    this.camera.updateMatrixWorld(true);
   }
 
   render(): void {

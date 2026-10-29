@@ -192,9 +192,18 @@ function buildField(grid: Grid): void {
 const direction = { x: 0, z: 0, known: false };
 
 /**
- * The field's direction under a world position. `known` is false where the
- * flood never arrived — a cell sealed off from the player, or the player's
- * own cell — and the caller decides what to do about it.
+ * The field's direction under a world position.
+ *
+ * Standing in a blocked cell is normal, not exceptional: separation shoves
+ * enemies into crates, and a cell is blocked when a body's *radius* would
+ * overlap one, so an enemy walking past a crate is often in a blocked cell
+ * while standing nowhere near the crate itself. Those cells carry no flow, so
+ * the step out is taken from the best open neighbour instead. Without it the
+ * caller falls back to a straight line at the player, walks into the crate,
+ * and grinds along its face — which is what sliding looks like.
+ *
+ * `known` is false only where there is no answer at all: sealed off from the
+ * player, or already in the player's own cell.
  */
 export function flowAt(
   grid: Grid,
@@ -202,8 +211,41 @@ export function flowAt(
   z: number,
 ): { x: number; z: number; known: boolean } {
   const index = cellAt(grid, x, z);
-  direction.x = grid.flowX[index];
-  direction.z = grid.flowZ[index];
-  direction.known = grid.dist[index] > 0;
+  if (grid.dist[index] > 0) {
+    direction.x = grid.flowX[index];
+    direction.z = grid.flowZ[index];
+    direction.known = true;
+    return direction;
+  }
+
+  // Blocked or unreached: head for whichever neighbour is open and closest to
+  // the player. Diagonals are not corner-checked here on purpose — this is an
+  // escape from a cell nothing should be standing in, and the push-out below
+  // is what keeps it out of the geometry.
+  const col = index % grid.cols;
+  const row = (index - col) / grid.cols;
+  let bestDist = Number.MAX_SAFE_INTEGER;
+  let bestCol = col;
+  let bestRow = row;
+
+  for (let n = 0; n < NEIGHBOURS.length; n++) {
+    const [dc, dr] = NEIGHBOURS[n];
+    const nc = col + dc;
+    const nr = row + dr;
+    if (nc < 0 || nc >= grid.cols || nr < 0 || nr >= grid.rows) continue;
+
+    const candidate = grid.dist[nr * grid.cols + nc];
+    if (candidate < 0 || candidate >= bestDist) continue;
+    bestDist = candidate;
+    bestCol = nc;
+    bestRow = nr;
+  }
+
+  const dx = bestCol - col;
+  const dz = bestRow - row;
+  const length = Math.hypot(dx, dz);
+  direction.x = length > 0 ? dx / length : 0;
+  direction.z = length > 0 ? dz / length : 0;
+  direction.known = length > 0;
   return direction;
 }

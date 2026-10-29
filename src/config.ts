@@ -45,7 +45,7 @@ export const ENEMY_COUNT = ENEMY_KINDS.length;
 export const ENEMY_SCALE = 0.32;
 
 /** Emeny  speed */
-export const ENEMY_SPEED = 2.6;
+export const ENEMY_SPEED = 1.6;
 
 /** Enemy radium. Help to stop enemy before as soon as it touches player */
 export const ENEMY_RADIUS = 0.35;

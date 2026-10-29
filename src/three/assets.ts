@@ -8,6 +8,9 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 import archerUrl from "../../assets/archer_playable.glb";
 import enemyURL from "../../assets/enemy.glb";
 import arrowUrl from "../../assets/arrow.glb";
+import treeUrl from "../../assets/tree.glb";
+import rockUrl from "../../assets/rock.glb";
+import mushroomUrl from "../../assets/mushroom.glb";
 
 /**
  * Every model is EXT_meshopt_compression, so the decoder is not optional —
@@ -40,3 +43,15 @@ export function loadArrow(): Promise<GLTF> {
   return loader.loadAsync(arrowUrl);
 }
 
+/**
+ * Scenery props from the client's mesh set: a canopy blob, a rock slab and a
+ * mushroom cap, 18 KB between them. Loaded together because `Scenery` wants
+ * all three at construction and none is any use alone.
+ */
+export function loadScenery(): Promise<[GLTF, GLTF, GLTF]> {
+  return Promise.all([
+    loader.loadAsync(treeUrl),
+    loader.loadAsync(rockUrl),
+    loader.loadAsync(mushroomUrl),
+  ]);
+}

@@ -41,13 +41,40 @@ function freeSlot(enemies: Enemy[]): number {
 
 function placeAtEdge(
   enemy: Enemy,
+  enemies: Enemy[],
   random: () => number,
   index: number,
 ): void {
   const halfX = ROOM_WIDTH / 2 - ENEMY_RADIUS;
+  const z = -(ROOM_DEPTH / 2 - ENEMY_RADIUS);
 
-  enemy.x = (random() * 2 - 1) * halfX;
-  enemy.z = -(ROOM_DEPTH / 2 - ENEMY_RADIUS);
+  // Several candidates, keeping the roomiest. One random x per spawn put new
+  // arrivals on top of the last one often enough to matter: the separation
+  // pass then has to tear two bodies apart in a few frames, which is the one
+  // thing it cannot do without shoving them harder than they can walk.
+  let bestX = (random() * 2 - 1) * halfX;
+  let bestGap = -1;
+
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const x = (random() * 2 - 1) * halfX;
+    let gap = Number.POSITIVE_INFINITY;
+
+    for (let i = 0; i < enemies.length; i++) {
+      const other = enemies[i];
+      if (other === enemy || !other.alive) continue;
+      gap = Math.min(gap, Math.hypot(other.x - x, other.z - z));
+    }
+
+    if (gap > bestGap) {
+      bestGap = gap;
+      bestX = x;
+    }
+    // Clear of everyone by a full body: nothing better to look for.
+    if (gap >= ENEMY_RADIUS * 2) break;
+  }
+
+  enemy.x = bestX;
+  enemy.z = z;
 
   enemy.facing = 0;
   enemy.throttle = 0;
@@ -63,6 +90,10 @@ function placeAtEdge(
   enemy.attackCooldown = 0;
   enemy.attacking = false;
   enemy.hitFlash = 0;
+  // Facing and heading agree at the top of the walk, or the first step is a
+  // body travelling one way and pointing another.
+  enemy.headingX = Math.sin(enemy.facing);
+  enemy.headingZ = Math.cos(enemy.facing);
 }
 
 export function updateSpawner(
@@ -82,7 +113,7 @@ export function updateSpawner(
     spawner.cooldown = 0;
     return;
   }
-  placeAtEdge(enemies[slot], spawner.random, slot);
+  placeAtEdge(enemies[slot], enemies, spawner.random, slot);
   spawner.spawned += 1;
   spawner.cooldown = SPAWN_INTERVAL;
 }

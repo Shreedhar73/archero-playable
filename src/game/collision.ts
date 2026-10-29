@@ -55,3 +55,66 @@ export function overlapsObstacle(
   }
   return false;
 }
+
+/**
+ * Whether an arrow fired from one point at another would reach it, or hit a
+ * crate on the way.
+ *
+ * The arrow is a circle, so every box is grown by its radius and the arrow
+ * treated as a point — the standard trade. It over-reports a hit at a box's
+ * corners, where the true swept shape is rounded, and over-reporting costs
+ * nothing here: the worst case is an archer declining a shot that would have
+ * grazed past a crate edge.
+ *
+ * Slab test: clip the segment against each axis' pair of planes in turn and
+ * see whether any interval survives. No square roots, no allocation; this
+ * runs once per enemy per shot attempt.
+ */
+export function clearShot(
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  radius: number,
+  obstacles: Obstacle[],
+): boolean {
+  const dx = toX - fromX;
+  const dz = toZ - fromZ;
+
+  for (let i = 0; i < obstacles.length; i++) {
+    const box = obstacles[i];
+    const minX = box.x - box.halfX - radius;
+    const maxX = box.x + box.halfX + radius;
+    const minZ = box.z - box.halfZ - radius;
+    const maxZ = box.z + box.halfZ + radius;
+
+    // Fractions along the segment, so the test is bounded by the target
+    // rather than by an infinite ray: a crate behind the enemy blocks nothing.
+    let near = 0;
+    let far = 1;
+    let blocked = true;
+
+    for (let axis = 0; axis < 2 && blocked; axis++) {
+      const origin = axis === 0 ? fromX : fromZ;
+      const delta = axis === 0 ? dx : dz;
+      const low = axis === 0 ? minX : minZ;
+      const high = axis === 0 ? maxX : maxZ;
+
+      if (Math.abs(delta) < 1e-9) {
+        // Parallel to this pair of planes: either inside the slab for the
+        // whole segment, or outside it for the whole segment.
+        if (origin < low || origin > high) blocked = false;
+        continue;
+      }
+
+      const first = (low - origin) / delta;
+      const second = (high - origin) / delta;
+      near = Math.max(near, Math.min(first, second));
+      far = Math.min(far, Math.max(first, second));
+      if (near > far) blocked = false;
+    }
+
+    if (blocked) return false;
+  }
+  return true;
+}
