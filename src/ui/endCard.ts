@@ -33,7 +33,7 @@ export class EndCard extends Container {
     // Placeholder. The brief asks for the game's logo; that artwork has to
     // come from the client. Swapping this block for a Sprite is a layout
     // change and nothing more.
-    this.logoText = label("LOGO", 24, 0xcfe0bd);
+    this.logoText = label("ARCHERO", 24, 0xcfe0bd);
     this.buttonLabel = label(adapter.ctaLabel, 22, 0x26341c);
 
     this.button.addChild(this.buttonFace);
@@ -53,10 +53,7 @@ export class EndCard extends Container {
 
   /** Called from onResize. Centres the panel at any aspect ratio. */
   layout(w: number, h: number): void {
-    this.dim
-      .clear()
-      .rect(0, 0, w, h)
-      .fill({ color: 0x0b1208, alpha: 0.62 });
+    this.dim.clear().rect(0, 0, w, h).fill({ color: 0x0b1208, alpha: 0.62 });
 
     const scale = Math.min(1, (Math.min(w, h) * 0.86) / PANEL_WIDTH);
     const cx = w / 2;
@@ -77,7 +74,13 @@ export class EndCard extends Container {
     const top = cy - (PANEL_HEIGHT * scale) / 2;
     this.logo
       .clear()
-      .roundRect(cx - 90 * scale, top + 26 * scale, 180 * scale, 54 * scale, 14 * scale)
+      .roundRect(
+        cx - 90 * scale,
+        top + 26 * scale,
+        180 * scale,
+        54 * scale,
+        14 * scale,
+      )
       .fill({ color: 0x3f6b32 });
     place(this.logoText, cx, top + 53 * scale, scale);
     place(this.heading, cx, top + 112 * scale, scale);
