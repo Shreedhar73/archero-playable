@@ -13,6 +13,7 @@ import {
 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
+import { ELEVATION } from "./camera.ts";
 import { createRandom, range } from "../engine/random.ts";
 
 /** Props from the client's mesh set. Static, unrigged, and used for their
@@ -71,6 +72,11 @@ const ZONES: Zone[] = [
   // This is the band that does the most work in portrait, hence the weight.
   { minX: 4.5, maxX: 6.3, minZ: -13, maxZ: 17, weight: 12, mirror: true },
   { minX: 6.3, maxX: 9.5, minZ: -13, maxZ: 17, weight: 2, mirror: true },
+  // Well behind the ruins, where the camera reaches once the player walks to
+  // the far wall. The reference's far end is a field of conifers standing in
+  // fog, and before the painting replaced the drawn ground this was the only
+  // stretch of surround with nothing scattered on it.
+  { minX: -11, maxX: 11, minZ: -24, maxZ: -13, weight: 5, mirror: false },
   // The outer flanks, which only landscape ever sees.
   { minX: 9.5, maxX: 14, minZ: -8, maxZ: 8, weight: 2, mirror: true },
 ];
@@ -91,6 +97,29 @@ const ZONE_TOTAL = ZONES.reduce((sum, zone) => sum + zone.weight, 0);
  * whatever this is: `findSpot` rejects the room's own footprint outright.
  */
 const CLEARANCE = 0;
+
+/**
+ * How far up the screen a unit of height carries, in units of z: cot(48.5).
+ *
+ * This is why a tree standing *outside* the near wall can still be painted
+ * over the arena — its canopy climbs the screen towards the room, and at
+ * this elevation five units of pine reach 4.4 units of z. From behind the
+ * far wall height climbs away from the room, so only the near side has to
+ * be kept clear.
+ */
+const LIFT = Math.cos(ELEVATION) / Math.sin(ELEVATION);
+
+/**
+ * The nearest a prop of this height may stand in front of the near wall
+ * without its canopy climbing back over the arena. Anything behind the far
+ * wall, or clear of the room in x, is left exactly where it is.
+ */
+function clearOfArena(x: number, z: number, height: number): number {
+  const halfX = ROOM_WIDTH / 2 + CLEARANCE;
+  const halfZ = ROOM_DEPTH / 2 + CLEARANCE;
+  if (z <= halfZ || Math.abs(x) >= halfX + height) return z;
+  return Math.max(z, halfZ + LIFT * height);
+}
 
 /**
  * One piece of a prop, in fractions of the prop's own height.
@@ -191,7 +220,13 @@ export class Scenery {
           ? this.scatter(random, kind)
           : kind.fixed.map(([x, z, height]) => ({
               x,
-              z,
+              // Hand-placed, then held off the arena by the same rule the
+              // scattered ones obey: the four at the near corners are five
+              // units tall and were leaning their canopies back over the
+              // play area. Moved rather than dropped — the framing is why
+              // they are hand-placed at all, and the haze they land in is
+              // where the reference keeps its own near trees.
+              z: clearOfArena(x, z, height),
               height,
               stretch: range(random, 0.9, 1.12),
               angle: range(random, 0, Math.PI * 2),
@@ -230,12 +265,12 @@ export class Scenery {
     const spots: Spot[] = [];
 
     for (let c = 0; c < kind.clusters; c++) {
-      const centre = this.findSpot(random, 0, 0);
+      const centre = this.findSpot(random, kind, 0, 0);
       if (centre === null) continue;
       const count = Math.round(range(random, kind.minPer, kind.maxPer));
 
       for (let i = 0; i < count; i++) {
-        const spot = this.findSpot(random, centre.x, centre.z, kind.spread);
+        const spot = this.findSpot(random, kind, centre.x, centre.z, kind.spread);
         if (spot === null) continue;
         spots.push({
           x: spot.x,
@@ -258,6 +293,7 @@ export class Scenery {
    */
   private findSpot(
     random: () => number,
+    kind: PropKind,
     aroundX: number,
     aroundZ: number,
     spread = 0,
@@ -280,6 +316,10 @@ export class Scenery {
       }
 
       if (Math.abs(x) <= halfX && Math.abs(z) <= halfZ) continue;
+      // Outside the room's footprint is not the same as off the arena: see
+      // LIFT. A prop in front of the near wall is rejected if its own height
+      // would carry its canopy back over the play area.
+      if (z > halfZ && clearOfArena(x, z, kind.maxHeight) !== z) continue;
       return { x, z };
     }
     return null;
@@ -364,6 +404,20 @@ export class Scenery {
           [6.3, 11.2, 4.0],
           [-7.0, -8.5, 4.4],
           [7.1, -8.9, 4.1],
+          // Beyond the ruins, where the camera reaches once the player walks
+          // to the far wall. The tall kind never scatters — `clusters` is 0
+          // and every one of these is placed by hand — so the field of
+          // conifers the reference has past its doorway has to be listed
+          // here or it does not exist.
+          //
+          // Inside |x| < 4.8 and no further back than z = -16: at the far
+          // end of the camera's travel the view reaches z = -17 and spans
+          // about nine units across, and the first five of these were put
+          // at |x| up to 9.5 and z to -22, which is simply off the screen.
+          [-4.1, -12.6, 4.8],
+          [4.3, -13.4, 4.5],
+          [-2.5, -15.8, 4.1],
+          [2.7, -15.2, 3.8],
         ],
         clusters: 0,
         minPer: 0,

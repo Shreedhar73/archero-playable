@@ -7,9 +7,15 @@ import { EnemyViews } from "./enemy.ts";
 import type { Enemy } from "../game/enemy.ts";
 import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
 import { clamp } from "../engine/math.ts";
-import { aimCamera, CAMERA_LEAD, cameraRange, frameRoom } from "./camera.ts";
+import {
+  aimCamera,
+  CAMERA_LEAD,
+  cameraRange,
+  frameRoom,
+  setViewport,
+} from "./camera.ts";
 import { device } from "../engine/device.ts";
-import { checkerTexture } from "./textures.ts";
+import arenaUrl from "../../assets/arena.webp";
 import { Scenery, type SceneryAssets } from "./scenery.ts";
 import { ArrowViews } from "./arrows.ts";
 import { Impacts } from "./impacts.ts";
@@ -62,50 +68,72 @@ const projected: Projected = { x: 0, y: 0, onScreen: false };
  * thing that stops a body at the edge, and the floor is still y = 0.
  */
 
-/** Teeth across the far edge, and how far each one bites into the arena. */
-const FRINGE_TEETH = 52;
-const FRINGE_DEPTH = 0.26;
-const FRINGE_COLOUR = 0x44812d;
+/**
+ * The painting, in its own pixel coordinates, and what they mean out here.
+ *
+ * `assets/arena.webp` is `assets/raw/level-1.jpg` resized and alpha-keyed and
+ * nothing else — no crop, no re-composite — so these are the source image's
+ * own numbers and can be checked against it in any image viewer.
+ *
+ * FIELD is the arena, coral border to coral border. It is the one rectangle
+ * that has to land exactly on ROOM_WIDTH x ROOM_DEPTH, because `clampToRoom`
+ * stops bodies at that rectangle's edge and nothing in `src/game/` has ever
+ * heard of this image. Everything else is placed relative to it.
+ *
+ * The painting's field is 1635 px long where the room is 16 units and 1034 px
+ * wide where it is 9, so the two scales differ by 12%: its arena is shorter
+ * than ours. Mapping is where that is absorbed — the squares come out 12%
+ * long in z, which the 48.5-degree camera foreshortens back towards square.
+ */
+const IMAGE_W = 1200;
+const IMAGE_H = 2100;
+const FIELD = { x0: 93, y0: 465, x1: 1127, y1: 2100 };
+/** The ruins, and the row their feet stand on. */
+const RUINS = { x0: 85, y0: 0, x1: 1075, y1: 345 };
+
+/** Painting pixels to world units, across and along. */
+const PX_X = ROOM_WIDTH / (FIELD.x1 - FIELD.x0);
+const PX_Z = ROOM_DEPTH / (FIELD.y1 - FIELD.y0);
+const COLUMN_0 = (FIELD.x0 + FIELD.x1) / 2;
+const ROW_0 = (FIELD.y0 + FIELD.y1) / 2;
+
+const worldX = (column: number): number => (column - COLUMN_0) * PX_X;
+const worldZ = (row: number): number => (row - ROW_0) * PX_Z;
+/** ...and back, as texture coordinates. v counts from the image's bottom. */
+const uAt = (x: number): number => (x / PX_X + COLUMN_0) / IMAGE_W;
+const vAt = (z: number): number => 1 - (z / PX_Z + ROW_0) / IMAGE_H;
 
 /**
- * Everything flat lives within a hair of y = 0, so the order has to be
- * explicit: coplanar surfaces z-fight, and a flickering floor is worse than
- * any of them is worth.
- */
-/**
- * How far the land outside stands above the arena floor.
+ * How far the ground reaches, in world units.
  *
- * The arena is cut *into* the ground, not laid on top of it — the real game's
- * play area sits a step below its surroundings, and the exposed earth of that
- * cut is what you see at the edges. It is also why every line drawn round the
- * arena was rejected: the edge is a step, and a step is a thing with a side,
- * not a stripe.
- *
- * Nothing in `src/game/` knows about it. Bodies still walk the y = 0 plane
- * and `clampToRoom` still stops them at the same x and z; what moved is the
- * land, upwards.
+ * Wider and longer than the painting, on purpose: the UVs run past 0 and 1 at
+ * the sides and `ClampToEdgeWrapping` repeats the painting's own outermost
+ * column, which along the arena is flat surround green. That is the padding,
+ * and it costs no pixels. It is also why the near end is the honest weak
+ * point — the painting is cut off there, so what clamping repeats towards the
+ * camera is the last row of checker rather than a boundary.
  */
-const DROP = 0.38;
+const GROUND_HALF_W = 11;
+const GROUND_NEAR = 12;
 
-/** Earth, exposed by the cut. */
-const BANK_COLOUR = 0xa9763e;
 const FLOOR_Y = 0;
-const FRINGE_Y = DROP + 0.004;
 
-/** Olive, not pale: in the reference everything outside the arena sits in
- *  tree shade and reads darker than the grass inside. The one pale area is
- *  the near mist, and that is drawn in Pixi over the top (`src/ui/mist.ts`),
- *  because fog fades by distance and the mist is at the near edge. */
 /**
- * The land outside, a clear step darker and cooler than the arena.
+ * The land beyond the ruins, and the colour of the horizon behind it.
  *
- * It was briefly lifted to the recording's own sampled outer grass, which is
- * the same brightness as its arena — but the recording can afford that
- * because it rules an earth path between the two, and there is no line here
- * any more. With nothing drawn at the edge, tone is the only thing left
- * saying where play stops, so the two greens have to differ.
+ * The painting stops at the ruins' feet, and when the camera follows the
+ * player to the far wall what used to lie past the doorway — land, trees,
+ * haze — went with the geometry the plate replaced. The reference still has
+ * all three: its far end is a field of fog with conifers standing in it.
+ *
+ * Flat, because that is all it ever was: one colour, the painting's own
+ * surround sampled at RGB(143,202,36) and used raw. Not divided by the 0.86
+ * this lighting multiplies by, the way the painted ground's material is —
+ * that plane is unlit, so there is nothing to undo, and dividing it is what
+ * put a bright seam at the ruins' feet. The trees out there are `Scenery`'s,
+ * and `src/ui/mist.ts` fades the whole thing out.
  */
-const SURROUND = 0x6f9c47;
+const BEYOND = 0x8fca24;
 
 /**
  * How fast the camera closes the gap to where it wants to be, per second.
@@ -121,9 +149,52 @@ const FOLLOW_RATE = 4.5;
  * Three.js world boot: renderer, camera, light. Owns the #world canvas,
  * stacked below the Pixi UI overlay. resize() only touches renderer/camera.
  */
+/**
+ * The one image both the ground and the ruins are cut from.
+ *
+ * sRGB explicitly, because three decodes a colour map as linear otherwise and
+ * the grass comes out pale. Clamped rather than wrapped: each mesh's UVs stay
+ * inside its own band, so wrapping could only ever be a bug showing itself.
+ */
+function arenaTexture(): THREE.Texture {
+  const map = new THREE.TextureLoader().load(arenaUrl);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = THREE.ClampToEdgeWrapping;
+  map.wrapT = THREE.ClampToEdgeWrapping;
+  map.anisotropy = 4;
+  return map;
+}
+
+/**
+ * Points a plane at one rectangle of the painting, by rewriting its UVs.
+ *
+ * This is what replaces cutting the image up: two meshes, two rectangles, one
+ * file and one upload. `texture.offset`/`repeat` would do the same arithmetic
+ * but they live on the texture, so two rectangles would mean two textures.
+ * The rectangle is a per-mesh fact, so it belongs on the per-mesh thing.
+ *
+ * Values outside 0..1 are intended and clamp — see GROUND_HALF_W.
+ */
+function rectUv(
+  geometry: THREE.BufferGeometry,
+  u0: number,
+  v0: number,
+  u1: number,
+  v1: number,
+): void {
+  const uv = geometry.attributes.uv;
+  for (let i = 0; i < uv.count; i++) {
+    uv.setXY(
+      i,
+      u0 + uv.getX(i) * (u1 - u0),
+      v0 + uv.getY(i) * (v1 - v0),
+    );
+  }
+}
+
 export class WorldScene {
   readonly scene = new THREE.Scene();
-  readonly camera: THREE.PerspectiveCamera;
+  readonly camera: THREE.OrthographicCamera;
   readonly renderer: THREE.WebGLRenderer;
   private readonly archer: ArcherView;
   private readonly enemies: EnemyViews;
@@ -140,6 +211,8 @@ export class WorldScene {
    * sweeping onto them from the middle of the room.
    */
   private follow = Number.NaN;
+  /** Both the ground and the ruins are bands of this one image. */
+  private readonly arena = arenaTexture();
   private readonly point = new THREE.Vector3();
   /** pixelsPerUnit()'s own pair — see the note there. */
   private readonly spanA = new THREE.Vector3();
@@ -157,12 +230,14 @@ export class WorldScene {
 
     // Matches the surround, so anything the ground does not reach still reads
     // as distance rather than as a letterbox.
-    this.scene.background = new THREE.Color(SURROUND);
+    this.scene.background = new THREE.Color(BEYOND);
 
     // Long lens, not a wide one: a narrow FOV from far away keeps the room's
     // near and far edges nearly the same width, so the arena reads as a
     // rectangle. frameRoom sets position, near and far on every resize.
-    this.camera = new THREE.PerspectiveCamera(22, 1, 1, 100);
+    // The frustum is set by `frameRoom` on the first resize; these are
+    // placeholders, not a framing.
+    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
 
     // Hemisphere fills the shadows with sky colour so they are not black;
     // the directional light is what actually shapes anything.
@@ -173,11 +248,10 @@ export class WorldScene {
     this.scene.add(new THREE.HemisphereLight(0xeaf4ff, 0x8fa172, 1.55));
     this.addSun();
 
-    this.addSurround();
+    this.addGround();
+    this.addBeyond();
     this.addGate();
-    this.scene.add(new Scenery(assets.scenery, DROP).root);
-    this.addFloor();
-    this.addFringe();
+    this.scene.add(new Scenery(assets.scenery, 0).root);
     this.scene.add(new ObstacleViews(obstacles).root);
 
     this.archer = new ArcherView(assets.hero);
@@ -207,64 +281,70 @@ export class WorldScene {
    * a loose box is a blurry contact shadow.
    */
   /**
-   * The way out, beyond the far wall.
+   * The land past the ruins' feet, where the painting runs out.
    *
-   * Not reachable and not simulated — `clampToRoom` still stops every body at
-   * the wall. It is there because the reference has one and the top of our
-   * room was blank surround: a doorway at the end of the room is what turns
-   * "a square you are standing in" into "a room you are trying to leave", and
-   * it costs five boxes and no bytes.
+   * A hair below the painted ground rather than level with it: the two are
+   * coplanar otherwise, and a flickering horizon is worse than a seam.
+   * Unlit, because a flat colour under a key light is a flat colour with a
+   * gradient on it, and this one has to meet the painting's own apron.
+   */
+  private addBeyond(): void {
+    const far = worldZ(RUINS.y1);
+    const depth = 40;
+    const beyond = new THREE.Mesh(
+      new THREE.PlaneGeometry(4 * GROUND_HALF_W, depth),
+      new THREE.MeshBasicMaterial({ color: BEYOND }),
+    );
+    beyond.rotation.x = -Math.PI / 2;
+    beyond.position.set(0, FLOOR_Y - 0.01, far - depth / 2);
+    this.scene.add(beyond);
+  }
+
+  /**
+   * The way out, beyond the far wall: the source image's ruins, keyed off
+   * their dark background and stood upright at the far edge.
+   *
+   * Upright, not flat. The plate below is a top-down painting and lies on the
+   * ground, but the ruins are painted in elevation — their front faces are
+   * what you see — so laid flat they smear into the grass. One quad at the
+   * far lip is where that painting is already looking from.
+   *
+   * Unlit (`MeshBasicMaterial`): the stone has its own shading baked in, and
+   * a second light over the top greys it. `alphaTest` rather than blending,
+   * so the doorway is a hole that sorts correctly against everything behind
+   * it instead of a transparent surface fighting the depth buffer.
    */
   private addGate(): void {
-    // Three stone tones, because from 68 degrees the top faces are most of
-    // what is on screen and one colour makes a stepped wall read as a slab.
-    const stone = new THREE.MeshStandardMaterial({ color: 0x8d9e7e });
-    const capstone = new THREE.MeshStandardMaterial({ color: 0xc3cfae });
-    const door = new THREE.MeshStandardMaterial({ color: 0x8a6136 });
-    // The green shield over the doorway — the reference's level marker. It
-    // carries no number here, because nothing in this ad has a level to
-    // count; it is the shape that says "this is the way out".
-    const badge = new THREE.MeshStandardMaterial({ color: 0x2f7a46 });
-    const badgeTrim = new THREE.MeshStandardMaterial({ color: 0xd8e4c2 });
-    const z = -ROOM_DEPTH / 2 - 1.3;
-    const group = new THREE.Group();
-
-    // x, y(base), z, sizeX, sizeY, sizeZ, material. Built as courses at
-    // different heights rather than one wall with a hole: the steps are the
-    // only depth cue this camera angle gives a static structure.
-    const pieces: [number, number, number, number, number, number, THREE.Material][] = [
-      // The long back wall, and a lower apron in front of it.
-      [0, 0, z - 0.5, 13, 2.1, 1.4, stone],
-      [0, 0, z + 0.7, 13, 0.75, 1.0, capstone],
-      // Shoulders stepping down towards the trees at either side.
-      [-5.3, 0, z - 0.5, 2.6, 2.9, 1.5, stone],
-      [5.3, 0, z - 0.5, 2.6, 2.9, 1.5, stone],
-      [-5.3, 2.9, z - 0.5, 2.6, 0.35, 1.5, capstone],
-      [5.3, 2.9, z - 0.5, 2.6, 0.35, 1.5, capstone],
-      // The two piers either side of the doorway, standing proud of the wall.
-      [-1.85, 0, z, 1.1, 3.1, 1.9, stone],
-      [1.85, 0, z, 1.1, 3.1, 1.9, stone],
-      [-1.85, 3.1, z, 1.3, 0.4, 2.1, capstone],
-      [1.85, 3.1, z, 1.3, 0.4, 2.1, capstone],
-      // Lintel across the gap, with its own cap on top.
-      [0, 2.5, z, 2.7, 0.6, 1.9, stone],
-      [0, 3.1, z, 3.0, 0.4, 2.1, capstone],
-      // The doors themselves. Across the front of the opening rather than
-      // set back inside it: from 68 degrees the lintel roofs over anything
-      // recessed, and a doorway with nothing visible in it is just a gap.
-      [0, 0, z + 0.78, 2.6, 2.35, 0.4, door],
-      // Badge, with a pale rim showing round it.
-      [0, 3.0, z + 0.95, 1.5, 1.5, 0.22, badgeTrim],
-      [0, 3.1, z + 1.02, 1.2, 1.2, 0.22, badge],
-    ];
-    for (const [x, base, zz, sx, sy, sz, material] of pieces) {
-      const box = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
-      box.position.set(x, DROP + base + sy / 2, zz);
-      box.castShadow = true;
-      box.receiveShadow = true;
-      group.add(box);
-    }
-    this.scene.add(group);
+    // Width and height both from the across-scale: the ruins are painted in
+    // elevation, so their pixels are height, not the depth PX_Z measures.
+    const width = (RUINS.x1 - RUINS.x0) * PX_X;
+    const height = (RUINS.y1 - RUINS.y0) * PX_X;
+    const geometry = new THREE.PlaneGeometry(width, height);
+    rectUv(
+      geometry,
+      RUINS.x0 / IMAGE_W,
+      1 - RUINS.y1 / IMAGE_H,
+      RUINS.x1 / IMAGE_W,
+      1 - RUINS.y0 / IMAGE_H,
+    );
+    const gate = new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({
+        map: this.arena,
+        transparent: true,
+        alphaTest: 0.5,
+      }),
+    );
+    // Its foot on the floor, a hair beyond the far wall so the fringe painted
+    // on the plate still reads in front of it.
+    // Standing on the row the painting has them standing on, centred where
+    // the painting centres them — both read off the image, not nudged.
+    gate.position.set(
+      worldX((RUINS.x0 + RUINS.x1) / 2),
+      height / 2,
+      worldZ(RUINS.y1),
+    );
+    this.scene.add(gate);
   }
 
   private addSun(): void {
@@ -311,158 +391,52 @@ export class WorldScene {
   }
 
   /**
-   * Ground outside the walls. A 9x12 room cannot fill a 9:19 phone screen, so
-   * what surrounds it has to be land rather than void. Flat and darker than
-   * the arena, as in the reference: the checker marks where play happens, so
-   * checkering the outside too would say the opposite, and lighting it more
-   * brightly would make the arena read as a hole.
-   */
-  private addSurround(): void {
-    const material = new THREE.MeshStandardMaterial({ color: SURROUND });
-    const halfX = ROOM_WIDTH / 2;
-    const halfZ = ROOM_DEPTH / 2;
-    const out = ROOM_DEPTH * 3;
-
-    // Four planes rather than one, because the land stands above the arena
-    // now: a single sheet at this height would be laid straight over the
-    // floor and hide it. x, z, sizeX, sizeZ — a frame with the room's own
-    // footprint missing from the middle.
-    const sheets: [number, number, number, number][] = [
-      [-halfX - out / 2, 0, out, ROOM_DEPTH],
-      [halfX + out / 2, 0, out, ROOM_DEPTH],
-      [0, -halfZ - out / 2, ROOM_WIDTH + out * 2, out],
-      [0, halfZ + out / 2, ROOM_WIDTH + out * 2, out],
-    ];
-    for (const [x, z, sizeX, sizeZ] of sheets) {
-      const sheet = new THREE.Mesh(
-        new THREE.PlaneGeometry(sizeX, sizeZ),
-        material,
-      );
-      sheet.rotation.x = -Math.PI / 2;
-      sheet.position.set(x, DROP, z);
-      sheet.receiveShadow = true;
-      this.scene.add(sheet);
-    }
-
-    this.addBanks();
-  }
-
-  /**
-   * The sides of the cut: four slabs of earth whose inner faces are the walls
-   * of the pit the arena sits in.
+   * The ground: one plate, painted.
    *
-   * These are what the old waist-high walls should have been all along. They
-   * stand *below* the land rather than above the floor, so nothing projects
-   * between the camera and the fight, and they are not in any collision list
-   * — the floor they face is still the y = 0 plane every body walks on.
-   */
-  private addBanks(): void {
-    // Earth on the sides, grass on top: the slab is the edge of the land, so
-    // its upper face is still lawn. Left all earth, the top face reads from
-    // above as a brown band ruled round the arena — which is the very thing
-    // three attempts at a boundary line were deleted for.
-    const earth = new THREE.MeshStandardMaterial({ color: BANK_COLOUR });
-    const turf = new THREE.MeshStandardMaterial({ color: SURROUND });
-    // +x, -x, +y, -y, +z, -z — BoxGeometry's own group order.
-    const material = [earth, earth, turf, earth, earth, earth];
-    const halfX = ROOM_WIDTH / 2;
-    const halfZ = ROOM_DEPTH / 2;
-    const thickness = 0.5;
-    // x, z, sizeX, sizeZ. Each sits just outside the room, so its inner face
-    // lands exactly on the boundary clampToRoom uses.
-    const banks: [number, number, number, number][] = [
-      [-halfX - thickness / 2, 0, thickness, ROOM_DEPTH + thickness * 2],
-      [halfX + thickness / 2, 0, thickness, ROOM_DEPTH + thickness * 2],
-      [0, -halfZ - thickness / 2, ROOM_WIDTH, thickness],
-      [0, halfZ + thickness / 2, ROOM_WIDTH, thickness],
-    ];
-    for (const [x, z, sizeX, sizeZ] of banks) {
-      const bank = new THREE.Mesh(
-        new THREE.BoxGeometry(sizeX, DROP, sizeZ),
-        material,
-      );
-      bank.position.set(x, DROP / 2, z);
-      bank.castShadow = true;
-      bank.receiveShadow = true;
-      this.scene.add(bank);
-    }
-  }
-
-  /** One checker square per world unit, which is why the GridHelper is gone. */
-  private addFloor(): void {
-    const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(ROOM_WIDTH, ROOM_DEPTH),
-      new THREE.MeshStandardMaterial({
-        // Low contrast, as in the reference: the checker is a scale cue, not
-        // a pattern competing with the characters. Two steps apart in value
-        // and no more — at four the squares became the thing you look at.
-        //
-        // The hue is measured, not picked. Sampled from the recording the
-        // grass renders RGB(126,177,25); ours rendered (136,186,57) — close
-        // in value, far too much blue in it, which is what made ours read as
-        // mid-green beside their yellow-green. These are those numbers
-        // divided by the 0.86 this lighting multiplies them by.
-        // Roughly 1.3 units a square. The reference shows about seven
-        // across the arena where ours showed twelve, and a checker that fine
-        // stops being a scale cue and becomes a texture.
-        map: checkerTexture(
-          "#92ce1d",
-          "#8dc91a",
-          ROOM_WIDTH / 2.6,
-          ROOM_DEPTH / 2.6,
-        ),
-      }),
-    );
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.y = FLOOR_Y;
-    floor.receiveShadow = true;
-    this.scene.add(floor);
-  }
-
-  /**
-   * The sawtooth of darker grass along the far edge.
+   * It replaces four things that were drawn here — the surround, the banks of
+   * the step, the checkered floor and the sawtooth fringe — because the
+   * source image already has all four in it, and two of them drawn twice
+   * would fight. The arena field in that image is mapped onto exactly
+   * ROOM_WIDTH x ROOM_DEPTH, so `clampToRoom` still stops bodies where the
+   * painted earth line is.
    *
-   * One triangle per tooth, written straight into a buffer: the shape is
-   * thirty-four triangles and a loop, where a texture would be a file to
-   * inline and a row of cones would be thirty-four transforms for the same
-   * silhouette. Unlit, because it is a marking on the ground rather than a
-   * thing standing on it.
+   * **The arena is flat again.** It used to be cut a step into the land, and
+   * the side of that cut was the project's answer to "no painted border".
+   * This image paints the border instead, so the step would only double it.
+   *
+   * The plane stops at GROUND_HALF_W and GROUND_NEAR and does not reach the
+   * horizon; what fills the rest is `scene.background`, set to SURROUND. Its
+   * UVs deliberately run outside 0..1 at the sides, where clamping repeats
+   * the painting's own flat green, so the join reads as distance.
    */
-  private addFringe(): void {
-    const halfX = ROOM_WIDTH / 2;
-    const z = -ROOM_DEPTH / 2;
-    const step = ROOM_WIDTH / FRINGE_TEETH;
-    const vertices = new Float32Array(FRINGE_TEETH * 9);
-
-    for (let i = 0; i < FRINGE_TEETH; i++) {
-      const left = -halfX + i * step;
-      // Every third tooth is longer. A perfectly even sawtooth reads as a
-      // pattern printed on the grass; the reference's is grass.
-      const depth = FRINGE_DEPTH * (i % 3 === 0 ? 1.45 : 1);
-      const points = [
-        left, 0, z,
-        left + step / 2, 0, z + depth,
-        left + step, 0, z,
-      ];
-      vertices.set(points, i * 9);
-    }
-
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
-    geometry.computeVertexNormals();
-    const fringe = new THREE.Mesh(
+  private addGround(): void {
+    // From the ruins' feet to well in front of the near wall.
+    const far = worldZ(RUINS.y1);
+    const depth = GROUND_NEAR - far;
+    const geometry = new THREE.PlaneGeometry(2 * GROUND_HALF_W, depth);
+    rectUv(
       geometry,
-      // Double-sided: the winding of a flat fan is not worth getting right
-      // twice, and one unlit triangle fan costs nothing either way.
-      new THREE.MeshBasicMaterial({
-        color: FRINGE_COLOUR,
-        side: THREE.DoubleSide,
+      uAt(-GROUND_HALF_W),
+      vAt(GROUND_NEAR),
+      uAt(GROUND_HALF_W),
+      vAt(far),
+    );
+    const ground = new THREE.Mesh(
+      geometry,
+      new THREE.MeshStandardMaterial({
+        map: this.arena,
+        // The plate carries its own flat lighting and this scene then
+        // multiplies it by about 0.86. The drawn colours used to be written
+        // pre-divided by that; a texture cannot be, so the divide moves to
+        // the material's multiplier. Safe only because there is a map here.
+        color: new THREE.Color().setScalar(1 / 0.86),
       }),
     );
-    fringe.position.y = FRINGE_Y;
-    this.scene.add(fringe);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.set(0, FLOOR_Y, (far + GROUND_NEAR) / 2);
+    ground.receiveShadow = true;
+    this.scene.add(ground);
   }
-
 
   /** Sync the player mesh with the game state. Takes the whole player: the
    *  view reads facing, throttle, the shoot timer and health, and adding each
@@ -548,7 +522,7 @@ export class WorldScene {
     this.screenW = w;
     this.screenH = h;
     this.renderer.setSize(w, h);
-    this.camera.aspect = w / h;
+    setViewport(w, h);
     frameRoom(this.camera);
     // Re-clamped into the new aspect's travel strip, never reset: rotating
     // mid-run must re-layout the view, not jump the camera back to the
