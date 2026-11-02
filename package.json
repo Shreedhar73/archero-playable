@@ -12,6 +12,7 @@
     "archer": "node scripts/build-archer.mjs",
     "archero": "node scripts/archero-merge.mjs && node scripts/build-archero.mjs",
     "archero:view": "node scripts/archero-view.mjs",
+    "archero:compare": "node scripts/archero-compare.mjs",
     "assets:check": "node scripts/check-assets.mjs assets/archer_playable.glb && node scripts/check-assets.mjs assets/enemy.glb",
     "build": "npm run check && npm run test && npm run build:generic",
     "build:generic": "vite build --mode generic && node scripts/package.mjs generic",

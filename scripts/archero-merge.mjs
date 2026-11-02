@@ -70,6 +70,11 @@ const CLIPS = [
  * the prop's flat face down the shot direction lays the bow over on its side,
  * which is what it was doing.
  *
+ * A turn about the limbs was tried here, to catch the bow's face at a camera
+ * it is edge-on to, and a longer bow with it. Both were rejected on sight:
+ * legible in a contact sheet, wrong in the game. The bow stays where the
+ * measurement puts it.
+ *
  * `mirror` is the one thing the measurement cannot settle. An axis has no
  * direction, so limb-to-limb and aim-to-aim still leaves a half-turn about
  * the limbs — string where the riser should be — and deciding it needs to
@@ -79,7 +84,7 @@ const CLIPS = [
  * centre reads as a riser and points the other way, and every rule written
  * off its vertices picked the wrong side. So the half-turn is a flag, set by
  * putting the two bows side by side at the same frame of the same clip and
- * looking — `.flipcompare` renders exactly that pair.
+ * looking — `scripts/archero-compare.mjs` renders exactly that pair.
  *
  * `shootAt` is where in the Shoot clip to measure. Full draw: hand extended,
  * everything about the pose unambiguous. That the copy is exact is checkable
