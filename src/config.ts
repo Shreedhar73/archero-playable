@@ -28,8 +28,8 @@ export const PLAYER_BRAKE = 26;
  * covers 96% of a portrait screen's width and 59% of its height in the
  * recording, which at 9 units wide makes the foreshortened depth 12.0 units
  * of screen; at the measured 48.5-degree elevation that is a room 16 deep.
- * The user was right that the fight ground reads longer than ours did: it is,
- * by a third.
+ * The fight ground in the real game reads longer than ours did, and the
+ * measurement agrees: by a third.
  */
 export const ROOM_WIDTH = 9;
 export const ROOM_DEPTH = 16;

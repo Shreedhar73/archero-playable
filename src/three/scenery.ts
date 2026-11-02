@@ -16,32 +16,26 @@ import { ROOM_DEPTH, ROOM_WIDTH } from "../config.ts";
 import { ELEVATION } from "./camera.ts";
 import { createRandom, range } from "../engine/random.ts";
 
-/** Props from the client's mesh set. Static, unrigged, and used for their
- *  geometry alone — materials are assigned here, because the rip carries no
- *  textures and its `DefaultMaterial` has glTF's default metallicFactor of
- *  1.0, which renders black with no environment map. */
+/**
+ * Props from the ripped mesh set, used for geometry alone. Materials are
+ * assigned here: the rip's `DefaultMaterial` has metallicFactor 1.0, which
+ * renders black with no environment map.
+ */
 export interface SceneryAssets {
   tree: GLTF;
   rock: GLTF;
   mushroom: GLTF;
-  /** Not from the client's set — see `Scenery.kinds`. */
+  /** Not from the ripped set; see `Scenery.kinds`. */
   pine: GLTF;
 }
 
-/** Fixed seed: the scatter is part of the art, so it must look the same every
- *  run. A different seed is a different level, not a different session. */
+/** Fixed seed: the scatter is part of the art and must look the same every run. */
 const SEED = 20260112;
 
 /**
- * Where props may stand, split by what each orientation actually sees.
- *
- * `frameRoom` fits the room's width in portrait, from about 51 units back,
- * which leaves barely a unit of ground visible past the side walls but a long
- * run of it above and below. Landscape fits the depth instead, from about 31
- * units, which opens the horizontal field to roughly x = +-13 and crops the
- * top and bottom. Scattering uniformly over the union puts most of the props
- * where neither orientation looks, so the zones are weighted instead: the
- * ends for portrait, the flanks for landscape.
+ * Where props may stand. Portrait sees barely a unit of ground past the side
+ * walls but a long run above and below; landscape is the reverse. Zones are
+ * weighted so props land where each orientation looks.
  */
 interface Zone {
   minX: number;
@@ -50,35 +44,21 @@ interface Zone {
   maxZ: number;
   /** Relative share of cluster centres. */
   weight: number;
-  /** Flank zones are sampled on the right and mirrored, so one entry covers
-   *  both sides without a second set of numbers to keep in step. */
+  /** Flank zones are sampled on the right and mirrored. */
   mirror: boolean;
 }
 
 const ZONES: Zone[] = [
-  // Beyond the far wall: the top of a portrait screen, under the HUD. Split
-  // around the middle rather than spanning it, because the gate stands there
-  // now (`WorldScene.addGate`) and a copse in front of a doorway is a copse
-  // in front of the one landmark the room has.
+  // Beyond the far wall, split around the middle so nothing stands in front
+  // of the gate.
   { minX: 4.8, maxX: 9, minZ: -11, maxZ: -7.2, weight: 3, mirror: true },
-  // There is deliberately no zone in front of the near wall. The reference
-  // frame's land below the arena is empty: a clean band of grass, then two
-  // small conifers in fog, and no rocks, bushes or mushrooms anywhere in it.
-  // This zone used to put all three right under the near lip, where they are
-  // the largest and sharpest things on screen because nothing is between
-  // them and the camera. The two conifers are hand-placed with the rest.
-  // Right against the side walls, and now overlapping them: at this framing
-  // portrait sees only 0.09 units of ground past the wall, so a band that
-  // started clear of it put every tree off the side of the screen. The real
-  // game has conifers hugging both screen edges in every frame, and they get
-  // there by leaning over the rim — the trunk outside, the canopy inside.
-  // This is the band that does the most work in portrait, hence the weight.
+  // No zone in front of the near wall: that land is empty in the real game
+  // apart from two hand-placed conifers.
+  // Against the side walls, overlapping them. Portrait sees only 0.09 units
+  // of ground past the wall, so trees must lean over the rim to show at all.
   { minX: 4.5, maxX: 6.3, minZ: -13, maxZ: 17, weight: 12, mirror: true },
   { minX: 6.3, maxX: 9.5, minZ: -13, maxZ: 17, weight: 2, mirror: true },
-  // Well behind the ruins, where the camera reaches once the player walks to
-  // the far wall. The reference's far end is a field of conifers standing in
-  // fog, and before the painting replaced the drawn ground this was the only
-  // stretch of surround with nothing scattered on it.
+  // Behind the ruins, seen once the player walks to the far wall.
   { minX: -11, maxX: 11, minZ: -24, maxZ: -13, weight: 5, mirror: false },
   // The outer flanks, which only landscape ever sees.
   { minX: 9.5, maxX: 14, minZ: -8, maxZ: 8, weight: 2, mirror: true },
@@ -86,36 +66,23 @@ const ZONES: Zone[] = [
 
 const ZONE_TOTAL = ZONES.reduce((sum, zone) => sum + zone.weight, 0);
 
-/** Keep-out around the room. Tight on purpose: the reference lets canopies
- *  lean over the rim, and these sit a plinth's depth lower than the floor, so
- *  overlapping the wall reads as depth rather than as a mistake. */
 /**
- * Keep-out around the room, measured from the wall.
- *
- * Zero: a trunk may stand right against the outside of the wall, which is
- * what puts the canopy over the rim. Portrait sees only 0.09 units of ground
- * past the side wall, so anything that clears the room properly is a sliver
- * at the screen edge or off it entirely — and the real game's trees are not
- * slivers, they lean well into the frame. Nothing can get *inside* the room
- * whatever this is: `findSpot` rejects the room's own footprint outright.
+ * Keep-out around the room, measured from the wall. Zero lets a trunk stand
+ * right against the outside of the wall with its canopy over the rim.
+ * `findSpot` still rejects the room's own footprint.
  */
 const CLEARANCE = 0;
 
 /**
- * How far up the screen a unit of height carries, in units of z: cot(48.5).
- *
- * This is why a tree standing *outside* the near wall can still be painted
- * over the arena — its canopy climbs the screen towards the room, and at
- * this elevation five units of pine reach 4.4 units of z. From behind the
- * far wall height climbs away from the room, so only the near side has to
- * be kept clear.
+ * Units of z a unit of height carries up the screen: cot(elevation). A tree
+ * outside the near wall can still paint its canopy over the arena; behind
+ * the far wall height climbs away from the room.
  */
 const LIFT = Math.cos(ELEVATION) / Math.sin(ELEVATION);
 
 /**
  * The nearest a prop of this height may stand in front of the near wall
- * without its canopy climbing back over the arena. Anything behind the far
- * wall, or clear of the room in x, is left exactly where it is.
+ * without its canopy climbing back over the arena.
  */
 function clearOfArena(x: number, z: number, height: number): number {
   const halfX = ROOM_WIDTH / 2 + CLEARANCE;
@@ -124,15 +91,7 @@ function clearOfArena(x: number, z: number, height: number): number {
   return Math.max(z, halfZ + LIFT * height);
 }
 
-/**
- * One piece of a prop, in fractions of the prop's own height.
- *
- * A tree is three of these — trunk, lower canopy, upper canopy — because one
- * blob scaled to a tree's footprint reads as a splat of paint on the ground.
- * What gives a tree volume from a 68-degree camera is the stacking: the upper
- * canopy stands proud of the lower one, takes the sun on top and drops a
- * shadow across it, and that difference is the only depth cue this angle has.
- */
+/** One piece of a prop, in fractions of the prop's own height. */
 interface Part {
   geometry: BufferGeometry;
   material: MeshStandardMaterial;
@@ -142,32 +101,21 @@ interface Part {
   height: number;
   /** Width against the prop's footprint, 1 being all of it. */
   width: number;
-  /** Per-instance colour range. Instanced meshes share one material, so
-   *  variety has to come out of the instance colour buffer. */
+  /** Per-instance colour range; instanced meshes share one material. */
   from: Color;
   to: Color;
-  /** Whether this piece is drawn into the shadow map. Off for most of them:
-   *  the shadow pass pays for every instance again, and a trunk hidden under
-   *  its own canopy or a rock the size of a boot contributes nothing a player
-   *  can see. */
+  /** The shadow pass pays for every instance again, so only the pieces that show cast. */
   shadow: boolean;
 }
 
 interface PropKind {
   parts: Part[];
   /**
-   * Hand-placed spots, as `[x, z, height]`. When present the scatter is not
-   * used at all.
-   *
-   * Art direction, not procedural variety. The real game shows about three
-   * trees against the arena at any moment — two down one side, one down the
-   * other — and at that count a weighted random scatter is a lottery: one
-   * seed clumps all three below the near wall and leaves both flanks bare.
-   * Scatter is right for forty rocks and wrong for three trees.
+   * Hand-placed spots as `[x, z, height]`. When present the scatter is not
+   * used: at three trees a random scatter can clump them all on one side.
    */
   fixed?: [number, number, number][];
-  /** Props are placed in copses, not sprinkled: an even scatter reads as a
-   *  texture, and clumps read as a wood. */
+  /** Props are placed in copses; an even scatter reads as a texture. */
   clusters: number;
   minPer: number;
   maxPer: number;
@@ -175,8 +123,7 @@ interface PropKind {
   spread: number;
   minHeight: number;
   maxHeight: number;
-  /** Footprint against height. Below 1 for a tree, which is taller than it is
-   *  wide; well above it for a rock slab. */
+  /** Footprint against height. */
   widthRatio: number;
 }
 
@@ -193,13 +140,9 @@ interface Spot {
 }
 
 /**
- * Trees, rocks and mushrooms scattered outside the walls. Instanced: five
- * draw calls for a few hundred pieces, because the frame budget is 16.6 ms
- * and the characters have first claim on it.
- *
- * Decoration only. Nothing here is in any collision list — the room's walls
- * are what bound play, and art that silently changed the rules would make
- * every visual tweak a gameplay change.
+ * Trees, rocks and mushrooms outside the walls. Instanced: five draw calls
+ * for a few hundred pieces. Decoration only, nothing here is in a collision
+ * list.
  */
 export class Scenery {
   readonly root = new Group();
@@ -216,19 +159,14 @@ export class Scenery {
     const colour = new Color();
 
     for (const kind of this.kinds(assets)) {
-      // Every part of a prop reads the same spots, which is what keeps a
-      // trunk under its own canopy.
+      // Every part of a prop reads the same spots, which keeps a trunk under
+      // its own canopy.
       const spots =
         kind.fixed === undefined
           ? this.scatter(random, kind)
           : kind.fixed.map(([x, z, height]) => ({
               x,
-              // Hand-placed, then held off the arena by the same rule the
-              // scattered ones obey: the four at the near corners are five
-              // units tall and were leaning their canopies back over the
-              // play area. Moved rather than dropped — the framing is why
-              // they are hand-placed at all, and the haze they land in is
-              // where the reference keeps its own near trees.
+              // Hand-placed spots still obey the arena keep-out.
               z: clearOfArena(x, z, height),
               height,
               stretch: range(random, 0.9, 1.12),
@@ -255,8 +193,6 @@ export class Scenery {
         }
 
         mesh.castShadow = part.shadow;
-        // Nothing out here receives: these are small, saturated shapes and
-        // the surround they stand on already takes the trees' shadows.
         mesh.receiveShadow = false;
         this.root.add(mesh);
       }
@@ -289,10 +225,10 @@ export class Scenery {
   }
 
   /**
-   * Rejection sampling around a point: pick a spot, retry while it lands on
-   * the room. `spread` of 0 means anywhere in a weighted zone, which is how
-   * cluster centres are chosen. Returns null when every attempt landed on the
-   * room — a prop skipped is cheaper than a prop inside a wall.
+   * Rejection sampling: pick a spot, retry while it lands on the room.
+   * `spread` of 0 means anywhere in a weighted zone, which is how cluster
+   * centres are chosen. Null when every attempt failed; a skipped prop is
+   * cheaper than one inside a wall.
    */
   private findSpot(
     random: () => number,
@@ -319,9 +255,8 @@ export class Scenery {
       }
 
       if (Math.abs(x) <= halfX && Math.abs(z) <= halfZ) continue;
-      // Outside the room's footprint is not the same as off the arena: see
-      // LIFT. A prop in front of the near wall is rejected if its own height
-      // would carry its canopy back over the play area.
+      // In front of the near wall a prop's own height can carry its canopy
+      // back over the play area; see LIFT.
       if (z > halfZ && clearOfArena(x, z, kind.maxHeight) !== z) continue;
       return { x, z };
     }
@@ -329,31 +264,21 @@ export class Scenery {
   }
 
   private kinds(assets: SceneryAssets): PropKind[] {
-    // Two tree meshes, and neither is interchangeable with the other.
-    //
-    // The client's set has exactly one tree-ish mesh and it is a *blob* —
-    // 0.58 x 0.56 x 0.40, one rounded mass, its green in COLOR_0. The real
-    // game's trees are conifers: a tiered cone of drooping fronds, lighter
-    // towards the top. Stacking the blob into tiers was tried and reads as
-    // broccoli, and building the tiers out of cones reads as cones. So the
-    // pine is a downloaded low-poly model (needles and trunk, 25 KB through
-    // the pipeline) and the client's blob stays in the scene as what it
-    // actually is: the round bushes that grow between the pines.
+    // The ripped set's only tree-ish mesh is a round blob. The real game's
+    // trees are conifers, so the pine is a separate low-poly model and the
+    // blob is used as the bushes between the pines.
     const canopy = prop(assets.tree);
     const [needles, trunk] = propParts(assets.pine);
-    // The blob carries its green in COLOR_0, so its material has to let
-    // vertex colours through. The pine does not have the attribute at all,
-    // and `vertexColors` on a geometry without one renders it black. Both
-    // still take their variation from the instance colour buffer.
+    // The blob carries its green in COLOR_0, so its material must let vertex
+    // colours through. The pine has no such attribute, and `vertexColors` on
+    // a geometry without one renders black.
     const blobLeaf = (): MeshStandardMaterial =>
       new MeshStandardMaterial({ vertexColors: true, roughness: 1 });
 
     return [
       {
-        // The pine, as two parts rather than one, so needles and trunk can be
-        // tinted apart. `propParts` normalised them against a shared box, so
-        // both are placed by base 0, height 1, width 1 — the model already
-        // holds its own proportions.
+        // Two parts so needles and trunk tint apart. `propParts` normalised
+        // them against a shared box, so both are placed at base 0, height 1.
         parts: [
           {
             geometry: needles.geometry,
@@ -361,14 +286,9 @@ export class Scenery {
             base: 0,
             height: 1,
             width: 1,
-            // The reference's trees are a bright mid-green, darker at the
-            // skirt than at the tip. The spread across the range is what
-            // stops a stand of them looking like one tree stamped out nine
-            // times.
             from: new Color(0x3f8f33),
             to: new Color(0x63b84a),
-            // The one piece that casts: it is the widest part of the tree, so
-            // its shadow is the tree's shadow.
+            // Widest part of the tree, so its shadow is the tree's shadow.
             shadow: true,
           },
           {
@@ -382,76 +302,33 @@ export class Scenery {
             shadow: false,
           },
         ],
-        // Counted off the recording rather than chosen: at any moment the
-        // real game shows about two pines down one side of the arena, one
-        // down the other, and a thin scatter beyond the walls — not a
-        // forest. An earlier pass put roughly two hundred out there and the
-        // arena read as a clearing hacked out of woodland, which is the
-        // opposite of a bright room with trees at its edges.
-        //
-        // The room is 9 by 12, so x = +-4.5 is the wall. The three against
-        // it stand just outside and lean in; the rest sit beyond the near
-        // and far walls, clear of the gate.
-        // A trunk at 4.95 is a tenth of a unit clear of the plinth rim, and
-        // portrait sees to x = 4.59 — so what shows of a side tree is the
-        // inner third of its canopy, which is what the recording shows too.
-        // Height is doing the rest of the work: the taller the pine, the
-        // wider the canopy and the more of it reaches over the wall.
+        // Counts and positions follow the game recording: about two pines
+        // down one side, one down the other, a thin scatter beyond the walls.
+        // x = +-4.5 is the wall; the three against it stand just outside and
+        // lean in.
         fixed: [
           [4.95, -3.0, 6.4],
           [4.95, 4.1, 5.8],
           [-4.95, 0.6, 6.1],
-          // The two in front of the near wall, measured off the reference
-          // frame rather than scattered. Its arena is 1131 px wide for nine
-          // units, so 125.7 px a unit: both tree centres sit at |x| = 3.7,
-          // their tops land 0.8 units of screen BELOW the wall line, and
-          // what shows of each is about 1.75 units tall. A cone 0.47 as wide
-          // as it is high reads h * (cos E + 0.47 sin E) = 1.011 h up the
-          // screen, so that is a tree about two units tall — and for its top
-          // to fall 0.8 below the wall it has to stand (0.8 + h cos E) / sin
-          // E = 3 units out from it.
-          //
-          // Four conifers five units tall used to stand here, a unit past
-          // the wall, and they were the sharpest, largest things on screen.
-          // The reference's are tree tops in fog, which is the whole reason
-          // its land reads as far away rather than as a garden.
+          // Two short conifers in front of the near wall, deep in the haze.
           [-3.8, 11.2, 2.4],
           [3.7, 11.0, 2.2],
           [-7.0, -8.5, 4.4],
           [7.1, -8.9, 4.1],
-          // Beyond the ruins, where the camera reaches once the player walks
-          // to the far wall. The tall kind never scatters — `clusters` is 0
-          // and every one of these is placed by hand — so the field of
-          // conifers the reference has past its doorway has to be listed
-          // here or it does not exist.
-          //
-          // Inside |x| < 4.8 and no further back than z = -16: at the far
-          // end of the camera's travel the view reaches z = -17 and spans
-          // about nine units across, and the first five of these were put
-          // at |x| up to 9.5 and z to -22, which is simply off the screen.
+          // Beyond the ruins. Keep inside |x| < 4.8 and z > -16: the view at
+          // the far end of the camera's travel reaches z = -17 and spans
+          // about nine units.
           [-4.1, -12.6, 4.8],
           [4.3, -13.4, 4.5],
           [-2.5, -15.8, 4.1],
           [2.7, -15.2, 3.8],
-          // The far end cannot be extended, and this is the line that says
-          // why. The camera's travel stops at lookZ = -4.44, so the top of a
-          // portrait screen is z = -4.44 - 9.978 / sin(48.5) = -17.8 — and
-          // on this side height climbs *away* from the view, because a far
-          // tree's canopy sits higher on screen than its trunk. A pine whose
-          // base is off the top is off the top entirely. Six were placed out
-          // to -28 and every one of them was invisible at any camera
-          // position; these two fill to the bound instead. The land itself
-          // runs 40 units past the gate (`WorldScene.addBeyond`) and always
-          // did — what was short was never the ground.
+          // At the far end height climbs away from the view, so a pine whose
+          // base is past z = -17.8 is off the top entirely. These fill to
+          // that bound.
           [-6.0, -16.9, 4.6],
           [6.1, -17.4, 4.2],
-          // The near land is the end that could be tripled, and these are
-          // what stand in it. Here height climbs *towards* the arena, so a
-          // pine whose base is past the bottom of the screen (z = 17.8) still
-          // shows its top: for a four-unit tree that reaches back to z = 21.
-          // They stand in the deep end of the haze, so what each contributes
-          // is a shape in fog rather than a tree — the two at 11 are the ones
-          // meant to read as trees.
+          // The near land. Height climbs towards the arena here, so a tree
+          // whose base is past the screen bottom (z = 17.8) still shows its top.
           [-6.2, 13.4, 4.2],
           [5.5, 14.1, 3.8],
           [-2.4, 16.2, 4.6],
@@ -464,16 +341,11 @@ export class Scenery {
         spread: 0,
         minHeight: 3.2,
         maxHeight: 5.4,
-        // 1, not a tree-ish fraction: the model is 7.5 wide against 16.1 tall
-        // and `propParts` normalised it to unit height, so it already carries
-        // its own proportions. Multiplying by a second ratio squashed every
-        // pine to a spike.
+        // The model is normalised to unit height and keeps its own proportions.
         widthRatio: 1,
       },
       {
-        // The client's own blob, used as the bush it is. Fewer and lower
-        // than the conifers, so they read as undergrowth between them rather
-        // than as a second kind of tree.
+        // The blob, as undergrowth between the pines.
         parts: [
           {
             geometry: canopy,
@@ -523,13 +395,10 @@ export class Scenery {
         spread: 0.9,
         minHeight: 0.3,
         maxHeight: 0.65,
-        // The slab is already three times as wide as it is tall once it is
-        // normalised to unit height, so its own proportions are kept.
+        // The slab is already wider than it is tall at unit height.
         widthRatio: 1,
       },
       {
-        // The reference scatters a few pink caps near the rim; from this
-        // camera they are punctuation, not props.
         parts: [
           {
             geometry: prop(assets.mushroom),
@@ -565,14 +434,10 @@ function pickZone(random: () => number): Zone {
 }
 
 /**
- * Every mesh in a GLTF, baked into geometries that *together* stand one unit
- * tall, sit on y = 0 and are centred on x/z.
- *
- * Normalised against the shared bounding box rather than each mesh's own, so
- * a model built from more than one piece keeps them in the right places
- * relative to each other — a trunk normalised on its own would come out the
- * same height as the tree it holds up. Returned tallest-first, which for a
- * tree is foliage then trunk.
+ * Every mesh in a GLTF, baked into geometries that together stand one unit
+ * tall, sit on y = 0 and are centred on x/z. Normalised against the shared
+ * bounding box so a multi-piece model keeps its pieces in place. Returned
+ * tallest-first.
  */
 function propParts(gltf: GLTF): PropPart[] {
   gltf.scene.updateWorldMatrix(true, true);
@@ -584,19 +449,14 @@ function propParts(gltf: GLTF): PropPart[] {
     widen(geometry, "position");
     widen(geometry, "normal");
     geometry.applyMatrix4(node.matrixWorld);
-    // The model's own material, kept rather than replaced: unlike the
-    // client's rip this one ships textures, and they are already paid for in
-    // the bundle. Cloned because the instance tint writes through it.
+    // Cloned because the instance tint writes through it.
     const material = (
       Array.isArray(node.material) ? node.material[0] : node.material
     ).clone() as MeshStandardMaterial;
     material.roughness = 1;
     material.metalness = 0;
-    // The map is dropped on purpose. The instance colour *multiplies* the
-    // texture, so with a dark one no tint can reach the bright mid-green the
-    // reference's trees are — and the pine's is a dark teal. Flat colour per
-    // instance gets there, matches how every other prop here is coloured,
-    // and takes the two baked textures out of the bundle with it.
+    // The instance colour multiplies the texture, and the pine's is a dark
+    // teal no tint can lift to the bright green needed. Flat colour instead.
     material.map = null;
     parts.push({ geometry, material });
   });
@@ -635,9 +495,8 @@ interface PropPart {
 
 /**
  * The first mesh in a GLTF, baked into a geometry that stands one unit tall,
- * sits on y = 0 and is centred on x/z. Normalised here rather than at each
- * instance so a scatter can think in world heights instead of in whatever
- * scale the prop happened to be authored at.
+ * sits on y = 0 and is centred on x/z, so the scatter can think in world
+ * heights.
  */
 function prop(gltf: GLTF): BufferGeometry {
   gltf.scene.updateWorldMatrix(true, true);
@@ -650,10 +509,9 @@ function prop(gltf: GLTF): BufferGeometry {
   if (mesh === undefined) throw new Error("scenery prop has no mesh");
 
   const geometry = mesh.geometry.clone();
-  // Meshopt stores positions and normals quantized into normalised integers,
-  // with the real size carried on the node's scale. Baking that scale into an
-  // integer attribute would clip every value back into [-1, 1], so the two
-  // attributes a matrix touches are widened to float first.
+  // Meshopt stores positions and normals as normalised integers with the
+  // real size on the node's scale. Baking that scale into an integer
+  // attribute would clip every value into [-1, 1], so widen to float first.
   widen(geometry, "position");
   widen(geometry, "normal");
   geometry.applyMatrix4(mesh.matrixWorld);

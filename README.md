@@ -59,26 +59,46 @@ re-layouts (`engine/resize.ts`), never restarts.
 
 ## Assets
 
+Every asset here was sourced by research, not handed over. The player is a
+chibi hero model off Sketchfab; the enemy archers are **Erika Archer** from
+Mixamo; all four clips both characters use — Idle, Run, Shoot, Death — come
+from the Mixamo library at <https://www.mixamo.com>, which is also the rig
+convention the whole character pipeline is written against. The props, the bow
+and the arrow come from a ripped Archero mesh set found on GitHub; the one
+prop that set does not contain is a conifer, so `low_poly_pine.glb` was
+downloaded separately and the set's canopy blob stayed in the scene as the
+round bushes it actually looks like. No logo artwork exists, so the end card's
+logo is procedural Pixi text.
+
+Preparing and optimizing those assets was done with AI, heavily and on
+purpose: the ripped set is 882 files, the two characters have different
+proportions and incompatible joint names, and both have to ship inside one
+HTML file. The fifteen scripts under `scripts/` are that work — audit, merge,
+retarget, measure, compress — and seven of them drive a headless Chromium: the
+two merges use it to run three.js outside a browser, and two more exist only
+to render an asset so a decision about it can be looked at instead of argued
+about. The eight `assets/*.glb` the game ships total 662 KB on disk, 0.88 MB
+once base64'd into the bundle — the hero's own merge goes in at 2.67 MB of raw
+GLB and comes out at 113 KB.
+
 The `assets/*.glb` the bundle inlines are committed; their sources are not,
 because the Mixamo downloads are tens of megabytes each.
 
-Scenery comes from the client's own mesh set — a canopy blob, a rock slab, a
-mushroom cap — with one exception: `low_poly_pine.glb` was downloaded, because
-that set has no conifer in it and the real game's trees are conifers. The blob
-stays in the scene as the bushes it actually looks like.
-
 ```sh
 npm run convert       # assets/raw/*.fbx -> intermediate glbs (headless Chromium)
-npm run archer        # convert, then merge into assets/archer_playable.glb
+npm run archer        # merge the clips into assets/archer_playable.glb
+npm run archero       # hero model + clips + bow -> assets/archero_hero.glb
+npm run archero:view  # contact sheet of the hero's clips, any camera angle
 npm run assets        # rebuild the other assets/*.glb from assets/raw/
 npm run assets:check  # print clips, bounds and bone names of the built files
 ```
 
-To rebuild the archer, `assets/raw/` needs the rigged character export as
+To rebuild the enemy archer, `assets/raw/` needs the rigged character export as
 `erika_archer.glb` plus four Mixamo downloads: `Standing Idle.fbx`,
 `Running.fbx` (**without** "In Place"), `Standing Aim Recoil.fbx`,
 `Standing Death Left 01.fbx`, and `Erika Archer With Bow Arrow.fbx` for the
-bow itself.
+bow itself. The hero needs `archero-model.glb`, `bow.glb` and the same four
+clips — `Standing Draw Arrow.fbx` in place of the recoil one.
 
 ## Commands
 

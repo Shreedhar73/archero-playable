@@ -37,9 +37,9 @@ export function loadArcher(): Promise<GLTF> {
 }
 
 /**
- * Loads the player: the client's own chibi hero, with the same four clips
+ * Loads the player: the Sketchfab chibi hero, with the same four clips
  * retargeted onto its Mixamo rig by `scripts/archero-merge.mjs` and a bow
- * from the client's mesh set parented to its left hand. 110 KB against the
+ * from the ripped mesh set parented to its left hand. 110 KB against the
  * archer's 341 KB — a 1,496-triangle body and one 512² texture.
  *
  * Awaited during boot, so every clip is resident before the first frame.
@@ -54,14 +54,14 @@ export function loadEnemy(): Promise<GLTF> {
 }
 
 
-/** Arrow prop from the client's mesh set: 1.6 KB after the pipeline. */
+/** Arrow prop from the ripped mesh set: 1.6 KB after the pipeline. */
 export function loadArrow(): Promise<GLTF> {
   return loader.loadAsync(arrowUrl);
 }
 
 /**
  * Scenery props: a canopy blob, a rock slab and a mushroom cap from the
- * client's mesh set, plus a low-poly pine that is not from it — that set has
+ * ripped mesh set, plus a low-poly pine that is not from it — that set has
  * no conifer, only the blob, and the real game's trees are conifers. 43 KB
  * between them. Loaded together because `Scenery` wants
  * all three at construction and none is any use alone.

@@ -1,26 +1,15 @@
 /**
  * assets/raw/archero-final-raw.glb -> assets/archero_hero.glb
  *
- * Same division of labour as `build-archer.mjs`: `archero-merge.mjs` stays
- * faithful to the sources, and every decision that serves *this* game is made
- * here. The differences from the Erika build are the ones this source forces:
- *
- *  - The character is measured posed, not from the rest mesh. The merge wrote
- *    the number into the root node's extras because the skin's inverse bind
- *    matrices carry a ~24x scale: POSITION tops out at 6.4 where the skinned
- *    body stands 163 tall, so `modelHeight`-by-vertex would be 25x wrong.
- *  - The bow is a prop from the client's mesh set, exported white with
- *    `metallic 1`, which under this game's near-flat lighting renders as a
- *    dark smear. It is given wood here rather than in the merge, because it
- *    is a judgement about this game's lighting, not about the source.
- *  - The specular-glossiness conversion in the merge leaves `KHR_materials_
- *    specular` and `_ior` behind. three reads them, they tint the character
- *    towards grey under a flat key, and they cost JSON; the pipeline drops
- *    them.
- *
- * Unlike the Erika build this file is the *player* only — the enemy archers
- * still clone `archer_playable.glb`, which is what finally gives the two
- * sides different silhouettes.
+ * Same split as build-archer.mjs: the merge stays faithful to the sources,
+ * game decisions happen here. What this source needs on top:
+ *  - Height is read from the posed measurement the merge stored in extras.
+ *    The skin's inverse bind matrices carry a ~24x scale, so the vertex
+ *    POSITION range is 25x too small.
+ *  - The bow prop ships white at `metallic 1` and renders as a dark smear
+ *    under flat lighting. It is painted matte wood here.
+ *  - The spec-gloss conversion leaves `KHR_materials_specular` and `_ior`
+ *    behind. They grey the character under a flat key; dropped.
  *
  *   node scripts/build-archero.mjs
  */
@@ -56,7 +45,7 @@ import {
 const SRC = fileURLToPath(new URL("../assets/raw/archero-final-raw.glb", import.meta.url));
 const DST = fileURLToPath(new URL("../assets/archero_hero.glb", import.meta.url));
 
-/** What the renderers call `action(mixer, gltf, name)` with. */
+/** Clip names the renderers ask for. */
 const RENAME = {
   "Standing Idle": "Idle",
   Running: "Run",
@@ -67,19 +56,10 @@ const RENAME = {
 /** Clips that must not move the character: code owns x and z. */
 const IN_PLACE = ["Run"];
 
-/**
- * Metres, head to heel — the same number the Erika build uses, so the health
- * bar heights and the enemy scales in `src/config.ts` keep meaning what they
- * meant. The chibi proportions change what that height looks like, not what
- * the rest of the game measures against it.
- */
+/** Metres, head to heel. Health bar heights and enemy scales depend on it. */
 const ARCHER_HEIGHT_M = 1.83;
 
-/**
- * Wood, matte, and lighter than wood really is: the prop ships white at
- * `metallic 1`, and the first pass at a true dark brown disappeared into the
- * costume at the game's camera. This reads as a bow from above.
- */
+/** Light matte wood. A true dark brown vanishes into the costume from above. */
 const BOW_COLOR = [0.52, 0.35, 0.19, 1];
 const BOW_MATERIAL = "DefaultMaterial";
 
@@ -108,10 +88,8 @@ function renameClips(doc) {
 }
 
 /**
- * Mixamo's In Place option rewrites the hips translation; without it the clip
- * walks the character off its own origin and the game's position fights it.
- * Holding every key at the first frame's x and z does the same thing and
- * keeps the vertical bob.
+ * The clips were exported without Mixamo's In Place option, so the run walks
+ * the character off its origin. Hold hips x and z at the first key; keep the bob.
  */
 function stripRootMotion(doc) {
   const stripped = [];
@@ -135,24 +113,16 @@ function stripRootMotion(doc) {
   return stripped;
 }
 
-/**
- * The posed height the merge measured, before `dropExtras` throws the extras
- * away. Nothing else in the file knows it: the rest mesh is 25x smaller than
- * the skinned body.
- */
+/** The posed height the merge stored. Must run before dropExtras. */
 function posedHeight(doc) {
   for (const node of doc.getRoot().listNodes()) {
     const h = node.getExtras().posedHeight;
     if (typeof h === "number") return h;
   }
-  throw new Error("the merge did not record posedHeight — rerun scripts/archero-merge.mjs");
+  throw new Error("the merge did not record posedHeight; rerun scripts/archero-merge.mjs");
 }
 
-/**
- * GLTFExporter writes three's `userData` straight into `extras`, which here is
- * the loader's own copy of every node name — 70 of them — plus the height
- * this build has already read.
- */
+/** GLTFExporter writes three's `userData` into `extras`; nothing reads it at runtime. */
 function dropExtras(doc) {
   let dropped = 0;
   for (const prop of doc.getGraph().listEdges().map((e) => e.getChild())) {
@@ -197,7 +167,7 @@ function dropUnskinnedWeights(doc) {
   return dropped;
 }
 
-/** specGloss leaves these behind; flat lighting makes no use of either. */
+/** Left behind by the spec-gloss conversion; flat lighting has no use for them. */
 function dropSpecularExtensions(doc) {
   let dropped = 0;
   for (const material of doc.getRoot().listMaterials()) {
@@ -213,18 +183,17 @@ function dropSpecularExtensions(doc) {
   return dropped;
 }
 
-/** Wood, matte, no map: 134 triangles do not need one. */
+/** Matte wood, no texture. */
 function paintBow(doc) {
   const bow = doc.getRoot().listMaterials().find((m) => m.getName() === BOW_MATERIAL);
-  if (!bow) throw new Error(`no "${BOW_MATERIAL}" material — did the bow attach?`);
+  if (!bow) throw new Error(`no "${BOW_MATERIAL}" material; the bow did not attach`);
   bow.setBaseColorFactor(BOW_COLOR).setMetallicFactor(0).setRoughnessFactor(0.85);
   return bow.getName();
 }
 
 /**
- * One node above everything, carrying only the unit conversion. The renderers
- * set position and rotation.y on `gltf.scene`, so the scale cannot live there
- * — it would be overwritten.
+ * One wrapper node carrying the unit conversion. Renderers overwrite the
+ * transform of `gltf.scene`, so the scale cannot live there.
  */
 function addGameScale(doc, scale) {
   const scene = doc.getRoot().getDefaultScene();
@@ -263,8 +232,7 @@ await doc.transform(
   resample({ tolerance: 1e-4 }),
   sparse(),
   textureCompress({ encoder: sharp, targetFormat: "webp", resize: [512, 512] }),
-  // EXT_meshopt_compression quantizes as part of its own work, so it stands in
-  // for a separate quantize() pass.
+  // meshopt quantizes on its own, so no separate quantize() pass.
   meshopt({ encoder: MeshoptEncoder, level: "high" }),
 );
 

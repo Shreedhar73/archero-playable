@@ -7,11 +7,9 @@ const BUTTON_WIDTH = 232;
 const BUTTON_HEIGHT = 62;
 
 /**
- * The end card: points gained, the game's logo, and the CTA.
- *
- * The CTA goes through adapter.cta() and uses adapter.ctaLabel — never
- * window.open directly, because each ad network has its own click handling
- * and bypassing it loses the click attribution the network is paid on.
+ * End card: points, logo, CTA. The CTA goes through adapter.cta() and uses
+ * adapter.ctaLabel, never window.open: bypassing the network's click handling
+ * loses attribution.
  */
 export class EndCard extends Container {
   private readonly dim = new Graphics();
@@ -30,9 +28,7 @@ export class EndCard extends Container {
 
     this.heading = label("", 20, 0xdfe8d2);
     this.score = label("0", 58, 0xffd166);
-    // Placeholder. The brief asks for the game's logo; that artwork has to
-    // come from the client. Swapping this block for a Sprite is a layout
-    // change and nothing more.
+    // Logo placeholder; no artwork exists for this build.
     this.logoText = label("ARCHERO", 24, 0xcfe0bd);
     this.buttonLabel = label(adapter.ctaLabel, 22, 0x26341c);
 

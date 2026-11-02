@@ -51,7 +51,7 @@ const KEEP_CLIPS = {
   // The arrow: a static single mesh, no rig and no clips. It still goes
   // through the pipeline for meshopt and texture compression.
   "arrow.glb": [],
-  // Scenery from the client's mesh set. All three are static props with no
+  // Scenery from the ripped mesh set. All three are static props with no
   // rig, no clips and no textures — the rip carries none, so they are lit by
   // materials assigned in `src/three/scenery.ts`. The tree is the exception
   // that matters: its green lives in COLOR_0 and nowhere else, which is why
@@ -59,7 +59,7 @@ const KEEP_CLIPS = {
   "tree.glb": [],
   "rock.glb": [],
   "mushroom.glb": [],
-  // The pine is not from the client's set — it was downloaded because that
+  // The pine is not from the ripped set — it was downloaded because that
   // set has no conifer in it, only a canopy blob, and the real game's trees
   // are conifers. Two meshes, needles and trunk, and it is the one scenery
   // prop that does carry textures.
