@@ -62,7 +62,7 @@ export const ENEMY_KINDS = [
 export const ENEMY_COUNT = ENEMY_KINDS.length;
 
 /** Ememy height of glb is 4.791 untits, archer is 1.832, so we need to scale down enemy */
-export const ENEMY_SCALE = 0.18;
+export const ENEMY_SCALE = 0.28;
 
 /**
  * How big the player's model is drawn. Visual only — `PLAYER_RADIUS` is what
@@ -77,7 +77,7 @@ export const ENEMY_SCALE = 0.18;
  * which flattened everything, and at the measured 48.5 the same model shows
  * its full height.
  */
-export const PLAYER_SCALE = 0.85;
+export const PLAYER_SCALE = 0.95;
 
 /** Emeny  speed */
 export const ENEMY_SPEED = 1.6;
@@ -189,7 +189,7 @@ export const ENEMY_BACKPEDAL = 0.8;
  * camera distance both read as "dark figure with a bow" — hence a strong mix
  * toward a saturated red. Scale helps a little, colour does the rest.
  */
-export const ENEMY_ARCHER_SCALE = 0.58;
+export const ENEMY_ARCHER_SCALE = 0.9;
 export const ENEMY_ARCHER_TINT = 0xff3b2e;
 
 export const ENEMY_ARCHER_TINT_MIX = 0.82;
