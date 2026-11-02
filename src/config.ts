@@ -193,3 +193,20 @@ export const ENEMY_ARCHER_SCALE = 0.58;
 export const ENEMY_ARCHER_TINT = 0xff3b2e;
 
 export const ENEMY_ARCHER_TINT_MIX = 0.82;
+
+/**
+ * Rest-pose height of each model as it ships, straight off
+ * `scripts/check-assets.mjs`: the hero 1.830, Erika 1.836, the robot 4.791.
+ * Times the scale it is drawn at, that is where its head is — and a floating
+ * bar is placed *and* sized from it, so changing a scale carries the bar with
+ * the body instead of leaving it behind at the height the old scale had.
+ *
+ * Declared here, below the scales, rather than beside them: a `const` read by
+ * an initializer above its own declaration is a temporal-dead-zone throw, not
+ * a hoist.
+ */
+export const PLAYER_HEIGHT = 1.83 * PLAYER_SCALE;
+export const ENEMY_HEIGHTS: Record<(typeof ENEMY_KINDS)[number], number> = {
+  melee: 4.791 * ENEMY_SCALE,
+  archer: 1.836 * ENEMY_ARCHER_SCALE,
+};

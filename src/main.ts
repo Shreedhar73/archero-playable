@@ -5,7 +5,9 @@ import {
   ENEMY_ARROW_DAMAGE,
   ENEMY_RADIUS,
   ENEMY_HP,
+  ENEMY_HEIGHTS,
   PLAYER_HP,
+  PLAYER_HEIGHT,
   ROOM_DEPTH,
   TUTORIAL_TIMEOUT,
 } from "./config.ts";
@@ -46,20 +48,31 @@ import { updateEnemyAttacks, updateShooting } from "./game/combat.ts";
  * CTA: call adapter.cta() from the end card; label is adapter.ctaLabel.
  */
 /**
- * How high above the floor a health bar is projected from.
+ * How wide a floating bar is, as a fraction of its own body's height.
  *
- * A little above the heads (1.83 for the archer, 1.53 for a scaled robot).
- * A world-space Y offset moves cos(48.5) = 0.66 of itself up the screen, so
- * clearing a head by a visible gap costs about half as much again in world
- * units — where at the 78-degree camera this project briefly had, it cost
- * five times and these numbers were over six.
+ * 0.57 is not a taste: 44 px was tuned at 055610a against a body 1.836 units
+ * tall, in the same 9-unit-wide framing this still uses, which is 42 px a
+ * unit. The ratio is what was already on screen — only now it is expressed
+ * against the body, so a scale edit resizes the bar instead of leaving a
+ * full-size strip over a smaller model.
+ *
+ * Height drives it, not width: Erika's bounding box is 1.845 across because
+ * her bow is in it, so width is not a usable proxy for how big a body reads.
  */
-const BAR_HEIGHT_PLAYER = 2.95;
-const BAR_HEIGHT_ENEMY = 2.65;
+const BAR_WIDTH_OF_HEIGHT = 0.57;
 
-/** Where a damage number starts, in world units above the body it belongs
- *  to. Below the health bar, so the two do not overlap on the way up. */
-const HIT_NUMBER_HEIGHT = 2.1;
+/**
+ * Clear of the head, in world units — one number for every body, so bars over
+ * heads of different heights sit the same distance above them. A world-space
+ * Y offset moves cos(48.5) = 0.66 of itself up the screen, so this is about
+ * seven pixels of gap.
+ */
+const BAR_GAP = 0.25;
+
+/** Where a damage number starts, as a fraction of the body's height. Below
+ *  the bar, so the two do not overlap on the way up — as a fixed 2.1 it was
+ *  *above* the hero's 1.56 head and crossed the bar it was meant to clear. */
+const HIT_NUMBER_OF_HEIGHT = 0.75;
 
 async function boot(): Promise<void> {
   // The network decides when the ad may start (MRAID ready etc.).
@@ -223,17 +236,36 @@ async function boot(): Promise<void> {
     // Floating bars live in Pixi but follow entities in the Three scene, so
     // each position is projected through the camera. project() returns a
     // shared object: read it before the next call.
-    const head = world.project(player.x, BAR_HEIGHT_PLAYER, player.z);
-    bars.set(0, head.x, head.y, player.hp / PLAYER_HP, head.onScreen, false, dt);
+    const head = world.project(player.x, PLAYER_HEIGHT + BAR_GAP, player.z);
+    bars.set(
+      0,
+      head.x,
+      head.y,
+      player.hp / PLAYER_HP,
+      head.onScreen,
+      false,
+      dt,
+      PLAYER_HEIGHT *
+        BAR_WIDTH_OF_HEIGHT *
+        world.pixelsPerUnit(player.x, player.z),
+    );
     bars.setPlayerHp(player.hp);
     if (player.hitFlash > lastPlayerFlash) {
-      const at = world.project(player.x, HIT_NUMBER_HEIGHT, player.z);
+      const at = world.project(
+        player.x,
+        PLAYER_HEIGHT * HIT_NUMBER_OF_HEIGHT,
+        player.z,
+      );
       if (at.onScreen) numbers.pop(player.lastDamage, at.x, at.y);
     }
     lastPlayerFlash = player.hitFlash;
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
-      const over = world.project(enemy.x, BAR_HEIGHT_ENEMY, enemy.z);
+      // Per kind, because the two are nothing like the same height: the
+      // robot stands 0.86 units and the archer 1.07, and one number for both
+      // put one bar on a head and the other in the air above it.
+      const height = ENEMY_HEIGHTS[enemy.kind];
+      const over = world.project(enemy.x, height + BAR_GAP, enemy.z);
       const standing = enemy.alive && enemy.dying === 0;
       bars.set(
         i + 1,
@@ -243,11 +275,16 @@ async function boot(): Promise<void> {
         standing && over.onScreen,
         true,
         dt,
+        height * BAR_WIDTH_OF_HEIGHT * world.pixelsPerUnit(enemy.x, enemy.z),
       );
       if (enemy.hitFlash > lastEnemyFlash[i]) {
         // project() hands back one shared object, so the bar's position is
         // already consumed above before this overwrites it.
-        const at = world.project(enemy.x, HIT_NUMBER_HEIGHT, enemy.z);
+        const at = world.project(
+          enemy.x,
+          height * HIT_NUMBER_OF_HEIGHT,
+          enemy.z,
+        );
         if (at.onScreen) numbers.pop(ARROW_DAMAGE, at.x, at.y);
       }
       lastEnemyFlash[i] = enemy.hitFlash;

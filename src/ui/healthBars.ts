@@ -1,9 +1,7 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { clamp } from "../engine/math.ts";
 
-/** Friend or foe at a glance, without reading the number. The player's bar
- *  also warns by turning red when low; an enemy bar is red from the start, so
- *  it has nothing left to warn with and does not need to. */
+/** The player's bar turns red when low; enemy bars are red throughout. */
 const FRIENDLY = 0x5fd04a;
 const FRIENDLY_LOW = 0xe0503a;
 const HOSTILE = 0xe8452f;
@@ -14,37 +12,29 @@ const HEIGHT = 6;
 /** Keeps a bar off the very edge of the frame. */
 const INSET = 6;
 
-/**
- * How fast a bar's fill closes on the real fraction, per second.
- *
- * A bar that jumps tells you the hit landed; a bar that drains tells you how
- * hard. The reference's do the second, and it costs one number per slot.
- */
+/** A bar never shrinks below this, in pixels. */
+const MIN_WIDTH = 18;
+
+/** How fast the fill closes on the real fraction, per second. */
 const DRAIN_RATE = 9;
 
 /**
- * One floating bar per entity, pooled like everything else. Pure
- * presentation: it is handed a screen position and a fraction, and knows
- * nothing about what it is floating over.
+ * One floating bar per entity, pooled. Pure presentation: handed a screen
+ * position and a fraction, knows nothing about what it floats over.
  */
 export class HealthBars extends Container {
   /**
-   * The player's own hit points, written on the bar.
-   *
-   * Only the player's: the real game prints a figure on the hero's bar and
-   * leaves its enemies with a bare strip, and nine numbers floating over nine
-   * bodies would be noise. Index 0 is the player by the pool's own
-   * convention. `Text.text` rebuilds a glyph texture, which is why this is
-   * written on change rather than every frame — it changes about ten times in
-   * a run.
+   * The player's hit points, printed on index 0 only. `Text.text` rebuilds a
+   * glyph texture, so it is written on change rather than every frame.
    */
   private readonly figure: Text;
   private figured = -1;
   private readonly bars: Graphics[] = [];
   private readonly drawn: number[] = [];
-  /** The fraction being shown, chasing the real one. Separate from `drawn`,
-   *  which is what the geometry was last built against. */
+  /** Fraction being shown, chasing the real one. `drawn` is what the geometry was last built against. */
   private readonly shown: number[] = [];
+  /** Scale factor per slot; the player's figure rides the same one. */
+  private readonly sized: number[] = [];
   private screenW = 1;
   private screenH = 1;
   private topLimit = 0;
@@ -69,28 +59,26 @@ export class HealthBars extends Container {
       this.bars.push(bar);
       this.drawn.push(-1);
       this.shown.push(1);
+      this.sized.push(1);
       this.addChild(bar);
     }
     // Added last so it sits over the strip it labels.
     this.addChild(this.figure);
   }
 
-  /** The number on the player's bar. Separate from `set` because it is the
-   *  one bar that carries one, and it is written only when it changes. */
   setPlayerHp(hp: number): void {
     const bar = this.bars[0];
     this.figure.visible = bar.visible;
     if (!bar.visible) return;
-    this.figure.position.set(bar.x + WIDTH / 2, bar.y + HEIGHT / 2 - 1);
+    const k = this.sized[0];
+    this.figure.scale.set(k);
+    this.figure.position.set(bar.x + (WIDTH * k) / 2, bar.y + (HEIGHT * k) / 2 - k);
     if (hp === this.figured) return;
     this.figured = hp;
     this.figure.text = `${hp}`;
   }
 
-  /**
-   * Called on resize only. `topLimit` sits below the HUD, so a bar pushed to
-   * the top of the frame does not land under the score.
-   */
+  /** Called on resize only. `topLimit` keeps bars out from under the HUD. */
   layout(w: number, h: number): void {
     this.screenW = w;
     this.screenH = h;
@@ -105,29 +93,31 @@ export class HealthBars extends Container {
     show: boolean,
     hostile: boolean,
     dt: number,
+    width: number,
   ): void {
     const bar = this.bars[index];
     bar.visible = show;
-    // A refilled slot — a respawn, or the pool handing this one to a new body
-    // — must not drain down from the last occupant's health.
+    // A respawned slot must not drain down from the last occupant's health.
     if (!show) {
       this.shown[index] = fraction;
       return;
     }
 
-    // Position every frame, because the entity moves. Rebuild the geometry
-    // only when the fraction actually changed — a few times per life, not
-    // sixty times a second.
-    // An enemy on the spawn line projects its bar above the far wall and out
-    // of frame. Clamping keeps it visible and attached to the right body,
-    // which beats a bar that is accurate and invisible.
+    // Position every frame; rebuild geometry only when the fraction changes.
+    // Size by scaling the pooled Graphics so movement costs no tessellation.
+    // Clamp to the screen: an enemy on the spawn line projects above the far wall.
+    const k = Math.max(width, MIN_WIDTH) / WIDTH;
+    this.sized[index] = k;
+    bar.scale.set(k);
+    const w = WIDTH * k;
+    const h = HEIGHT * k;
+    // `y` is the head; the bar hangs its bottom edge there.
     bar.position.set(
-      clamp(x, WIDTH / 2 + INSET, this.screenW - WIDTH / 2 - INSET) - WIDTH / 2,
-      clamp(y, this.topLimit, this.screenH - HEIGHT - INSET),
+      clamp(x, w / 2 + INSET, this.screenW - w / 2 - INSET) - w / 2,
+      clamp(y, this.topLimit + h, this.screenH - INSET) - h,
     );
     const eased = this.shown[index] + (fraction - this.shown[index]) * (1 - Math.exp(-dt * DRAIN_RATE));
-    // Snapped once it is within half a pixel of the target, so a bar that is
-    // asymptotically approaching empty stops rebuilding its geometry forever.
+    // Snap within half a pixel so an asymptotic approach stops rebuilding geometry.
     this.shown[index] = Math.abs(fraction - eased) < 1 / WIDTH / 2 ? fraction : eased;
 
     if (this.shown[index] === this.drawn[index]) return;

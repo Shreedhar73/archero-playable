@@ -141,6 +141,9 @@ export class WorldScene {
    */
   private follow = Number.NaN;
   private readonly point = new THREE.Vector3();
+  /** pixelsPerUnit()'s own pair — see the note there. */
+  private readonly spanA = new THREE.Vector3();
+  private readonly spanB = new THREE.Vector3();
 
   constructor(assets: WorldAssets, obstacles: Obstacle[]) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -496,6 +499,21 @@ export class WorldScene {
     projected.y = (-this.point.y * 0.5 + 0.5) * this.screenH;
     projected.onScreen = this.point.z < 1;
     return projected;
+  }
+
+  /**
+   * How many pixels a world unit spans *horizontally* at (x, z) — horizontal,
+   * so the camera's elevation does not foreshorten it. This is what turns a
+   * body's world size into the pixel size its floating bar is drawn at, which
+   * is the whole reason a bar now tracks the scale its model is drawn at.
+   *
+   * Its own vectors on purpose: `project()` hands back one shared object that
+   * the caller is still reading when this runs.
+   */
+  pixelsPerUnit(x: number, z: number): number {
+    this.spanA.set(x, 0, z).project(this.camera);
+    this.spanB.set(x + 1, 0, z).project(this.camera);
+    return Math.abs(this.spanB.x - this.spanA.x) * 0.5 * this.screenW;
   }
 
   /**
