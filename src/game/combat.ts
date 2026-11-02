@@ -18,17 +18,12 @@ import { fireProjectile, type Projectile } from "./projectiles.ts";
 import type { Obstacle } from "./obstacles.ts";
 import { nearestVisibleEnemy } from "./targeting.ts";
 
-/** Slightly more than touching, so a swing does not miss on a rounding error. */
+/** A hair past touching so a swing never misses on rounding. */
 const MELEE_REACH = ENEMY_RADIUS + PLAYER_RADIUS + 0.15;
 
 /**
- * The Archero rule: the archer fires automatically, but only while standing
- * still. That is the whole design of the game in one condition — moving is
- * dodging, standing is shooting, and the player is always choosing between
- * them.
- *
- * The cooldown keeps ticking while moving, so stopping fires immediately
- * rather than after a pause the player did not ask for.
+ * Auto-fire, only while standing still. The cooldown keeps ticking while
+ * moving so stopping fires at once.
  */
 export function updateShooting(
   player: Player,
@@ -39,25 +34,30 @@ export function updateShooting(
 ): void {
   player.fireCooldown -= dt;
   player.shooting = Math.max(0, player.shooting - dt);
-  // Decayed beside the shoot pose because they are the same kind of thing: a
-  // countdown the renderers read and the simulation never branches on.
   player.hitFlash = Math.max(0, player.hitFlash - dt);
-  // Moving cancels the pose outright: the archer cannot run with the bow
-  // drawn, and letting the clip finish while sprinting reads as a stutter.
+  // Moving cancels the pose; the Shoot clip must not play over the run.
   if (player.throttle > 0) player.shooting = 0;
-  if (player.throttle > 0 || player.fireCooldown > 0) return;
 
-  // Nothing in the open: hold the shot rather than feed the crate. Standing
-  // behind cover costing the player their damage is the point of cover.
-  const target = nearestVisibleEnemy(
+  // Every frame, moving or not: the target marker and the facing read this,
+  // not just the frames an arrow leaves.
+  player.target = nearestVisibleEnemy(
     enemies,
     player.x,
     player.z,
     FIRE_RANGE,
     obstacles,
   );
-  if (target === null) return;
 
+  if (player.target >= 0 && player.throttle === 0) {
+    // Standing: face the target. `movePlayer` owns facing while the stick is pushed.
+    const aim = enemies[player.target];
+    player.facing = Math.atan2(aim.x - player.x, aim.z - player.z);
+  }
+
+  if (player.throttle > 0 || player.fireCooldown > 0) return;
+  if (player.target < 0) return;
+
+  const target = enemies[player.target];
   const dx = target.x - player.x;
   const dz = target.z - player.z;
   const distance = Math.hypot(dx, dz);
@@ -66,9 +66,6 @@ export function updateShooting(
   const dirX = dx / distance;
   const dirZ = dz / distance;
 
-  // Facing follows the shot while standing: an archer firing sideways reads
-  // as a bug even when the arrow goes the right way.
-  player.facing = Math.atan2(dirX, dirZ);
   fireProjectile(
     projectiles,
     player.x + dirX * ARROW_SPAWN_OFFSET,
@@ -82,11 +79,8 @@ export function updateShooting(
 }
 
 /**
- * Enemy offence, both kinds.
- *
- * Melee swings when touching; archers hold at ENEMY_SHOOT_RANGE and fire.
- * Out of their own range either way, the cooldown resets, so stepping away
- * and back does not grant a free hit.
+ * Melee swings when touching; archers fire from ENEMY_SHOOT_RANGE. Out of
+ * range the cooldown resets, so stepping away and back is not a free hit.
  */
 export function updateEnemyAttacks(
   enemies: Enemy[],
@@ -115,11 +109,8 @@ export function updateEnemyAttacks(
     const dirX = distance > 0 ? dx / distance : 0;
     const dirZ = distance > 0 ? dz / distance : 1;
 
-    // Same rule as the player's: an archer with a crate in the way holds its
-    // shot. `updateEnemies` is what walks it out from behind the crate, so
-    // this is a pause, not a deadlock — and while it is walking, the facing
-    // belongs to the walk. Turning the body towards the player here as well
-    // is what made a repositioning archer look like it was sliding.
+    // Blocked archers hold the shot; `updateEnemies` walks them clear. While
+    // walking, facing belongs to the walk, so do not turn them here.
     const canShoot =
       enemy.kind !== "archer" ||
       clearShot(
@@ -138,8 +129,6 @@ export function updateEnemyAttacks(
 
     enemy.attacking = true;
     enemy.attackCooldown -= dt;
-    // Standing still and able to act: aim. An enemy that kept whatever facing
-    // it arrived with would shoot sideways.
     enemy.facing = Math.atan2(dirX, dirZ);
 
     if (enemy.attackCooldown > 0) continue;

@@ -34,18 +34,25 @@ const HIT_EMISSIVE = 0xffffff;
 const FLASH_INTENSITY = 0.6;
 
 /**
- * How long before a blow lands the warning arc appears, in seconds.
+ * The ring under whichever enemy the player's auto-aim has picked.
  *
- * The real game sweeps a red arc under an enemy that is about to strike, and
- * it is the only reason its melee is dodgeable rather than unfair. Read off
- * the attack cooldown in the view — `enemy.attacking` is already true exactly
- * when a body is in range with a clear line — so no windup state goes into
- * the simulation for an effect only the renderer cares about.
+ * It used to be a windup telegraph — it appeared 0.45 s before a blow landed
+ * and closed as the blow approached. That read as a target marker to
+ * everybody who saw it, because `ENEMY_SHOOT_RANGE` is 4.4 against the
+ * player's `FIRE_RANGE` of 5, so the enemy flashing red was almost always the
+ * one being shot at anyway. It says that on purpose now, off `player.target`.
+ *
+ * On the ground rather than over the head. At this camera the bodies overlap,
+ * and a caret in the air above a target lands on whatever body is standing
+ * behind it — which was tried, and read as marking the wrong enemy. A decal
+ * at the feet is attached to exactly one body and cannot be misread.
+ *
+ * One geometry, shared: every ring is the same shape at a different scale.
  */
-const TELEGRAPH = 0.45;
+const targetGeometry = new RingGeometry(0.42, 0.56, 24);
 
-/** One ring, shared: every warning is the same shape at a different scale. */
-const warningGeometry = new RingGeometry(0.42, 0.56, 24);
+/** Steady, not animated. It marks a fact that is either true or not. */
+const TARGET_OPACITY = 0.72;
 
 /**
  * Everything that differs between the two enemy kinds: which model they are,
@@ -84,7 +91,6 @@ class EnemyView {
    *  at zero weight like the looping clips. */
   private wasDying = false;
   private wasFlashing = false;
-  private readonly bodyScale: number;
   /** SkeletonUtils.clone shares materials between clones, so tinting or
    *  flashing one enemy would do it to every one of them. Each view needs its
    *  own copies. */
@@ -94,13 +100,11 @@ class EnemyView {
    *  at the archers' own intensity blows the whole body out to a silhouette
    *  and the hit stops being legible as a hit. */
   private readonly baseIntensity: number[] = [];
-  private readonly warning: Mesh;
-  private readonly warningMaterial: MeshBasicMaterial;
+  private readonly targetRing: Mesh;
 
   constructor(spec: KindSpec) {
     this.root = clone(spec.gltf.scene);
     this.root.scale.setScalar(spec.scale);
-    this.bodyScale = spec.scale;
     this.root.visible = false;
 
     this.root.traverse((node) => {
@@ -123,18 +127,23 @@ class EnemyView {
     // Parented to the body so it follows with one position write, and scaled
     // against the body's own scale so the two kinds get the same-sized ring
     // rather than one proportional to how big the model happens to be.
-    this.warningMaterial = new MeshBasicMaterial({
-      color: 0xff3b2e,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-    });
-    this.warning = new Mesh(warningGeometry, this.warningMaterial);
-    this.warning.rotation.x = -Math.PI / 2;
-    this.warning.position.y = 0.025 / spec.scale;
-    this.warning.scale.setScalar(1 / spec.scale);
-    this.warning.visible = false;
-    this.root.add(this.warning);
+    // One material per view rather than one shared: an InstancedMesh would
+    // save the draw calls, but nine rings of which at most one is visible is
+    // not where this frame's budget goes.
+    this.targetRing = new Mesh(
+      targetGeometry,
+      new MeshBasicMaterial({
+        color: 0xff3b2e,
+        transparent: true,
+        opacity: TARGET_OPACITY,
+        depthWrite: false,
+      }),
+    );
+    this.targetRing.rotation.x = -Math.PI / 2;
+    this.targetRing.position.y = 0.025 / spec.scale;
+    this.targetRing.scale.setScalar(1 / spec.scale);
+    this.targetRing.visible = false;
+    this.root.add(this.targetRing);
 
     this.mixer = new AnimationMixer(this.root);
     this.idle = action(this.mixer, spec.gltf, spec.idle);
@@ -150,7 +159,7 @@ class EnemyView {
     this.death.clampWhenFinished = true;
   }
 
-  sync(enemy: Enemy): void {
+  sync(enemy: Enemy, targeted: boolean): void {
     this.root.visible = enemy.alive;
     this.root.position.x = enemy.x;
     this.root.position.z = enemy.z;
@@ -180,16 +189,7 @@ class EnemyView {
       this.wasFlashing = flashing;
     }
 
-    // The arc fills as the blow approaches: at the moment it is solid, the
-    // hit lands. A ring that simply appears says "something is happening";
-    // one that closes says "now".
-    const winding = !dying && enemy.attacking && enemy.attackCooldown < TELEGRAPH;
-    this.warning.visible = winding;
-    if (winding) {
-      const ready = 1 - Math.max(0, enemy.attackCooldown) / TELEGRAPH;
-      this.warningMaterial.opacity = 0.28 + 0.5 * ready;
-      this.warning.scale.setScalar((1.25 - 0.3 * ready) / this.bodyScale);
-    }
+    this.targetRing.visible = targeted && !dying;
 
     const attacking = !dying && enemy.attacking;
     this.death.weight = dying ? 1 : 0;
@@ -237,8 +237,8 @@ export class EnemyViews {
     }
   }
 
-  sync(index: number, enemy: Enemy): void {
-    this.views[index].sync(enemy);
+  sync(index: number, enemy: Enemy, targeted: boolean): void {
+    this.views[index].sync(enemy, targeted);
   }
 
   /** Corpses advance too: a stopped mixer would resume mid-stride on respawn,

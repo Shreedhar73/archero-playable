@@ -472,8 +472,8 @@ export class WorldScene {
     this.archer.sync(player);
   }
 
-  syncEnemy(index: number, enemy: Enemy): void {
-    this.enemies.sync(index, enemy);
+  syncEnemy(index: number, enemy: Enemy, targeted: boolean): void {
+    this.enemies.sync(index, enemy, targeted);
   }
 
   /** Syncs one arrow and, on the frame it ends, puts a puff where it was. */

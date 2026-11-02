@@ -69,6 +69,7 @@ const BAR_WIDTH_OF_HEIGHT = 0.57;
  */
 const BAR_GAP = 0.25;
 
+
 /** Where a damage number starts, as a fraction of the body's height. Below
  *  the bar, so the two do not overlap on the way up — as a fixed 2.1 it was
  *  *above* the hero's 1.56 head and crossed the bar it was meant to clear. */
@@ -235,7 +236,7 @@ async function boot(): Promise<void> {
     world.syncPlayer(player);
     for (let i = 0; i < enemies.length; i++) {
       const ene = enemies[i];
-      world.syncEnemy(i, ene);
+      world.syncEnemy(i, ene, i === player.target);
     }
     for (let i = 0; i < projectiles.length; i++) {
       world.syncArrow(i, projectiles[i]);
@@ -296,6 +297,7 @@ async function boot(): Promise<void> {
       }
       lastEnemyFlash[i] = enemy.hitFlash;
     }
+
     numbers.advance(dt);
 
     world.update(dt);

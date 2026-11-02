@@ -4,17 +4,9 @@ import type { Enemy } from "./enemy.ts";
 import type { Obstacle } from "./obstacles.ts";
 
 /**
- * Nearest living enemy the shooter can actually hit: in range, and with no
- * crate between the two. Arrows die on crates, so without this the archer
- * spends the whole fight firing into the same box while an enemy stands
- * behind it — the shot looks aimed and lands nowhere.
- *
- * Nearest *visible*, not nearest: a closer enemy behind cover is skipped in
- * favour of one further away in the open, which is what a player does.
- *
- * The line is traced from where the arrow actually appears, a spawn offset
- * ahead of the shooter, rather than from its centre. A shooter standing with
- * its back against a crate is not blocked by the crate it is leaning on.
+ * Nearest living enemy in range with no crate in the way, as a pool index or
+ * -1. Traced from the arrow's spawn point, not the shooter's centre, so a
+ * crate at the shooter's back does not block.
  */
 export function nearestVisibleEnemy(
   enemies: Enemy[],
@@ -22,8 +14,8 @@ export function nearestVisibleEnemy(
   z: number,
   range: number,
   obstacles: Obstacle[],
-): Enemy | null {
-  let best: Enemy | null = null;
+): number {
+  let best = -1;
   let bestSquared = range * range;
 
   for (let i = 0; i < enemies.length; i++) {
@@ -44,7 +36,7 @@ export function nearestVisibleEnemy(
     }
 
     bestSquared = squared;
-    best = enemy;
+    best = i;
   }
 
   return best;
