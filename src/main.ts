@@ -24,7 +24,7 @@ import { HealthBars } from "./ui/healthBars.ts";
 import { addKills, createState, progress } from "./game/state.ts";
 import { EndCard } from "./ui/endCard.ts";
 import { TutorialHand } from "./ui/tutorialHand.ts";
-import { Mist } from "./ui/mist.ts";
+import { FOG_DEPTH, Mist } from "./ui/mist.ts";
 import { DamageNumbers } from "./ui/damageNumbers.ts";
 import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
@@ -218,10 +218,17 @@ async function boot(): Promise<void> {
     // Both walls, read one at a time: project() hands back one shared
     // object, so the near edge is taken before the far one overwrites it.
     const nearEdge = world.project(0, 0, ROOM_DEPTH / 2).y;
+    // ...and FOG_DEPTH of ground beyond it, which is where the haze finishes.
+    // Two world points rather than one screen band: the band a viewport
+    // leaves below the wall is not the same length at every aspect ratio, and
+    // a haze stretched to fit it reaches full white on top of the player on a
+    // short one.
+    const nearDeep = world.project(0, 0, ROOM_DEPTH / 2 + FOG_DEPTH).y;
     mist.layout(
       screenW,
       screenH,
       nearEdge,
+      nearDeep,
       world.project(0, 0, -ROOM_DEPTH / 2 - 4.6).y,
     );
     hud.update(state.points, progress(state));
