@@ -10,12 +10,15 @@
     "assets": "node scripts/optimize-assets.mjs",
     "convert": "node scripts/fbx-merge.mjs",
     "archer": "node scripts/build-archer.mjs",
+    "archero": "node scripts/archero-merge.mjs && node scripts/build-archero.mjs",
+    "archero:view": "node scripts/archero-view.mjs",
     "assets:check": "node scripts/check-assets.mjs assets/archer_playable.glb && node scripts/check-assets.mjs assets/enemy.glb",
     "build": "npm run check && npm run test && npm run build:generic",
     "build:generic": "vite build --mode generic && node scripts/package.mjs generic",
     "preview": "vite preview",
     "shot": "node scripts/shot.mjs",
-    "test": "node tests/sim.ts"
+    "test": "node tests/sim.ts",
+    "walk": "node scripts/walk.mjs"
   },
   "dependencies": {
     "pixi.js": "^8.8.1",

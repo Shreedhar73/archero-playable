@@ -12,15 +12,11 @@ import {
   ROOM_WIDTH,
 } from "../config.ts";
 import { overlapsObstacle } from "./collision.ts";
-import { damageEnemy, type Enemy } from "./enemy.ts";
+import { damageEnemy, HIT_FLASH_TIME, type Enemy } from "./enemy.ts";
 import type { Obstacle } from "./obstacles.ts";
 import type { Player } from "./player.ts";
 
-/**
- * One arrow. Same pooling rule as enemies: the array is built at boot and
- * `alive` decides what is simulated, because allocating during play is what
- * buys a garbage-collection pause in the middle of a frame.
- */
+/** One arrow. Pooled like enemies; `alive` gates simulation. */
 export interface Projectile {
   x: number;
   z: number;
@@ -29,9 +25,7 @@ export interface Projectile {
   /** Seconds before it despawns on its own. */
   life: number;
   alive: boolean;
-  /** Fired by an enemy archer: hits the player instead of the enemies. One
-   *  pool serves both, because the flight and collision rules are identical
-   *  and only the target differs. */
+  /** Enemy arrow: hits the player instead. One pool serves both sides. */
   hostile: boolean;
 }
 
@@ -51,11 +45,7 @@ export function createProjectiles(): Projectile[] {
   return projectiles;
 }
 
-/**
- * Launches one arrow if a slot is free. Silently does nothing when the pool
- * is full — dropping a shot is the correct behaviour for a fixed budget, and
- * at 24 slots against a 0.4s fire rate and a 2s life it cannot happen.
- */
+/** Drops the shot when the pool is full; at this fire rate and life it never is. */
 export function fireProjectile(
   projectiles: Projectile[],
   x: number,
@@ -79,12 +69,8 @@ export function fireProjectile(
 }
 
 /**
- * Moves every live arrow and resolves what it hits. Returns the number of
- * enemies killed this frame, so the caller can score them without this module
- * knowing anything about points.
- *
- * Order matters: an arrow is tested against enemies before obstacles, so a
- * shot grazing a crate edge still counts as the hit it visually looks like.
+ * Returns kills this frame; scoring lives elsewhere. Enemies are tested before
+ * obstacles so a shot grazing a crate edge still lands.
  */
 export function updateProjectiles(
   projectiles: Projectile[],
@@ -107,8 +93,7 @@ export function updateProjectiles(
       continue;
     }
 
-    // Enemy arrows fly slower than the player's, which is what makes them
-    // dodgeable rather than unavoidable chip damage.
+    // Enemy arrows are slower so they can be dodged.
     const speed = arrow.hostile ? ENEMY_ARROW_SPEED : ARROW_SPEED;
     arrow.x += arrow.dirX * speed * dt;
     arrow.z += arrow.dirZ * speed * dt;
@@ -125,6 +110,8 @@ export function updateProjectiles(
       const reach = PLAYER_RADIUS + ARROW_RADIUS;
       if (dx * dx + dz * dz <= reach * reach) {
         player.hp = Math.max(0, player.hp - ENEMY_ARROW_DAMAGE);
+        player.hitFlash = HIT_FLASH_TIME;
+        player.lastDamage = ENEMY_ARROW_DAMAGE;
         hit = true;
       }
     } else {

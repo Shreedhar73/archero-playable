@@ -7,28 +7,22 @@ export interface Obstacle {
 }
 
 /**
- * Two rows in the upper half, traced off `requirements/reference.jpg`.
- *
- * Measured from that image: the room is 507x634 px, the first row sits 18%
- * down and the second 41%, and everything below is open. That open bottom
- * half is the player's space -- a row down there, as the first draft had,
- * crowds the one place the player actually stands.
- *
- * Lane widths are checked against a body (0.7 across): 2.47 either side of
- * the top row, and 0.80 / 2.34 / 0.87 across the second. The tight ones are
- * deliberate -- they are what gives the flow field a decision to make.
- *
- * Boxes meeting a wall extend past it. Stopping flush puts clampToRoom's
- * limit inside the geometry, and the push-out then fights the clamp forever.
+ * Three rows at 18%, 41% and 62% of the depth, traced off
+ * `requirements/reference.jpg`. Narrow lanes in row two are what give the
+ * flow field a choice. Boxes meeting a wall extend past it, or clampToRoom's
+ * limit sits inside the geometry and fights the push-out.
  */
 export function createObstacles(): Obstacle[] {
   return [
     // Row one: a run of five across the centre.
-    { x: 0, z: -3.79, halfX: 2.02, halfZ: 0.47 },
-    // Row two: pairs at both walls, singles flanking a wide centre lane.
-    { x: -3.95, z: -1.09, halfX: 1.05, halfZ: 0.52 },
-    { x: -1.61, z: -1.09, halfX: 0.43, halfZ: 0.52 },
-    { x: 1.59, z: -1.09, halfX: 0.43, halfZ: 0.52 },
-    { x: 3.91, z: -1.09, halfX: 1.09, halfZ: 0.52 },
+    { x: 0, z: -5.12, halfX: 2.02, halfZ: 0.47 },
+    // Row two: pairs at both walls, singles flanking the centre lane.
+    { x: -3.95, z: -1.44, halfX: 1.05, halfZ: 0.52 },
+    { x: -1.61, z: -1.44, halfX: 0.43, halfZ: 0.52 },
+    { x: 1.59, z: -1.44, halfX: 0.43, halfZ: 0.52 },
+    { x: 3.91, z: -1.44, halfX: 1.09, halfZ: 0.52 },
+    // Row three: one block against each wall.
+    { x: -3.6, z: 1.92, halfX: 1.4, halfZ: 0.5 },
+    { x: 3.6, z: 1.92, halfX: 1.4, halfZ: 0.5 },
   ];
 }

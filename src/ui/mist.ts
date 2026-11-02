@@ -1,4 +1,4 @@
-import { CanvasSource, Sprite, Texture } from "pixi.js";
+import { CanvasSource, Container, Sprite, Texture } from "pixi.js";
 import { clamp } from "../engine/math.ts";
 
 /**
@@ -15,18 +15,43 @@ import { clamp } from "../engine/math.ts";
  * path: the wall sits close to the bottom of the screen there and the band
  * shrinks to nothing on its own.
  */
-export class Mist extends Sprite {
+export class Mist extends Container {
+  private readonly near = new Sprite(gradient(1));
+  /**
+   * The matching band at the far end.
+   *
+   * The reference hazes both edges, not one: beyond the gate its land fades
+   * to pale before the screen does. We only ever had the near band, so the
+   * far end stopped at a hard line of flat green under the HUD. Same
+   * gradient at just over half strength, flipped, anchored behind the gate
+   * rather than at the wall — at full strength it bleached the gate itself,
+   * which is the one landmark the far end has.
+   */
+  private readonly far = new Sprite(gradient(0.55));
+
   constructor() {
-    super(gradient());
+    super();
+    this.far.scale.y = -1;
+    this.addChild(this.near);
+    this.addChild(this.far);
   }
 
-  layout(w: number, h: number, topY: number): void {
-    const top = clamp(topY, 0, h);
-    this.position.set(0, top);
-    this.width = w;
-    this.height = Math.max(0, h - top);
+  layout(w: number, h: number, nearY: number, farY: number): void {
+    const bottom = clamp(nearY, 0, h);
+    this.near.position.set(0, bottom);
+    this.near.width = w;
+    this.near.height = Math.max(0, h - bottom);
     // Nothing to haze when the near wall is already off the bottom.
-    this.visible = this.height > 1;
+    this.near.visible = this.near.height > 1;
+
+    // Flipped, so its transparent end meets the wall and its solid end runs
+    // off the top of the screen. A negative scale means the sprite is drawn
+    // upwards from its anchor, so the anchor is the wall itself.
+    const top = clamp(farY, 0, h);
+    this.far.position.set(0, top);
+    this.far.width = w;
+    this.far.height = Math.max(0, top);
+    this.far.visible = this.far.height > 1;
   }
 }
 
@@ -36,7 +61,7 @@ export class Mist extends Sprite {
  * bundle is base64 under a 5 MB cap and a procedural texture costs only the
  * code that draws it.
  */
-function gradient(): Texture {
+function gradient(strength: number): Texture {
   const canvas = document.createElement("canvas");
   canvas.width = 1;
   canvas.height = 256;
@@ -47,9 +72,12 @@ function gradient(): Texture {
   const fade = ctx.createLinearGradient(0, 0, 0, 256);
   // Transparent at the wall, almost solid at the bottom edge. Never fully
   // solid: a hard stop reads as a band of paint rather than as distance.
-  fade.addColorStop(0, "rgba(228, 238, 208, 0)");
-  fade.addColorStop(0.45, "rgba(230, 240, 212, 0.62)");
-  fade.addColorStop(1, "rgba(236, 244, 220, 0.93)");
+  // Green, not white, and weaker than it was. The reference's haze is a pale
+  // yellow-green that trees stay visibly green inside; ours was near-white by
+  // the bottom edge and bleached every prop in it to grey.
+  fade.addColorStop(0, "rgba(206, 228, 172, 0)");
+  fade.addColorStop(0.5, `rgba(214, 233, 183, ${0.46 * strength})`);
+  fade.addColorStop(1, `rgba(226, 240, 200, ${0.82 * strength})`);
   ctx.fillStyle = fade;
   ctx.fillRect(0, 0, 1, 256);
 

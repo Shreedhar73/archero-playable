@@ -6,11 +6,13 @@ import {
 } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import archerUrl from "../../assets/archer_playable.glb";
+import heroUrl from "../../assets/archero_hero.glb";
 import enemyURL from "../../assets/enemy.glb";
 import arrowUrl from "../../assets/arrow.glb";
 import treeUrl from "../../assets/tree.glb";
 import rockUrl from "../../assets/rock.glb";
 import mushroomUrl from "../../assets/mushroom.glb";
+import pineUrl from "../../assets/low_poly_pine.glb";
 
 /**
  * Every model is EXT_meshopt_compression, so the decoder is not optional —
@@ -21,15 +23,29 @@ import mushroomUrl from "../../assets/mushroom.glb";
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
 /**
- * Loads the archer: Erika with Idle, Run, Shoot and Death, merged onto her
- * rig by `scripts/fbx-merge.mjs` and named by `scripts/build-archer.mjs`.
- * Awaited during boot, so every clip is resident before the first frame.
+ * Loads the enemy archers' model: Erika with Idle, Run, Shoot and Death,
+ * merged onto her rig by `scripts/fbx-merge.mjs` and named by
+ * `scripts/build-archer.mjs`.
  *
- * The enemy archers clone this same GLTF — see `EnemyViews` — so a clip
- * dropped here is dropped for both sides.
+ * This was the player's model too until the hero below arrived, and sharing
+ * it is what made both sides read as one silhouette. The enemy archers clone
+ * this GLTF — see `EnemyViews` — so a clip dropped here is dropped for all
+ * six of them.
  */
 export function loadArcher(): Promise<GLTF> {
   return loader.loadAsync(archerUrl);
+}
+
+/**
+ * Loads the player: the client's own chibi hero, with the same four clips
+ * retargeted onto its Mixamo rig by `scripts/archero-merge.mjs` and a bow
+ * from the client's mesh set parented to its left hand. 110 KB against the
+ * archer's 341 KB — a 1,496-triangle body and one 512² texture.
+ *
+ * Awaited during boot, so every clip is resident before the first frame.
+ */
+export function loadHero(): Promise<GLTF> {
+  return loader.loadAsync(heroUrl);
 }
 
 /** Loads the melee enemy. Same loader instance as archer  and iss stateless config*/
@@ -44,14 +60,17 @@ export function loadArrow(): Promise<GLTF> {
 }
 
 /**
- * Scenery props from the client's mesh set: a canopy blob, a rock slab and a
- * mushroom cap, 18 KB between them. Loaded together because `Scenery` wants
+ * Scenery props: a canopy blob, a rock slab and a mushroom cap from the
+ * client's mesh set, plus a low-poly pine that is not from it — that set has
+ * no conifer, only the blob, and the real game's trees are conifers. 43 KB
+ * between them. Loaded together because `Scenery` wants
  * all three at construction and none is any use alone.
  */
-export function loadScenery(): Promise<[GLTF, GLTF, GLTF]> {
+export function loadScenery(): Promise<[GLTF, GLTF, GLTF, GLTF]> {
   return Promise.all([
     loader.loadAsync(treeUrl),
     loader.loadAsync(rockUrl),
     loader.loadAsync(mushroomUrl),
+    loader.loadAsync(pineUrl),
   ]);
 }

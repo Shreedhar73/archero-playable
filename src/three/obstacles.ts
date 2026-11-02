@@ -19,11 +19,26 @@ export class ObstacleViews {
   readonly root = new Group();
 
   constructor(obstacles: Obstacle[]) {
-    const material = new MeshStandardMaterial({
+    // Sage, not white. The reference's blocks are a pale green-grey against
+    // the grass — ours were a near-white top over grey sides, which at this
+    // camera angle is the brightest thing on screen and pulled the eye off
+    // the fight. Top and sides are a step apart, not a jump.
+    //
+    // Six materials, not one: BoxGeometry groups its faces, so the top can be
+    // a flat pale colour while the sides keep the bordered texture. The real
+    // game's blocks read as rounded because their top catches the light and
+    // their sides do not, and from a 68-degree camera the top face is most of
+    // what is on screen — so that one difference does the work an actual
+    // bevel would, for no extra geometry.
+    const sides = new MeshStandardMaterial({
       // Pale stone blocks, as in reference.jpg. The baked border gives the
       // toon edge without an outline pass.
-      map: plankTexture("#dfe3d2", "#cdd3bd", "#9aa386"),
+      map: plankTexture("#9fb690", "#93ab84", "#7b9470"),
     });
+    const top = new MeshStandardMaterial({ color: 0xf2f5e8 });
+    const bottom = new MeshStandardMaterial({ color: 0xb6bda6 });
+    // +x, -x, +y, -y, +z, -z — BoxGeometry's own group order.
+    const material = [sides, sides, top, bottom, sides, sides];
 
     // One stretched box per obstacle read as a bench. Tiling the same
     // footprint with uniform cubes reads as stacked crates, which is what the

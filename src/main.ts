@@ -1,5 +1,8 @@
 import { Application } from "pixi.js";
 import {
+  ARROW_DAMAGE,
+  ENEMY_DAMAGE,
+  ENEMY_ARROW_DAMAGE,
   ENEMY_RADIUS,
   ENEMY_HP,
   PLAYER_HP,
@@ -20,9 +23,10 @@ import { addKills, createState, progress } from "./game/state.ts";
 import { EndCard } from "./ui/endCard.ts";
 import { TutorialHand } from "./ui/tutorialHand.ts";
 import { Mist } from "./ui/mist.ts";
+import { DamageNumbers } from "./ui/damageNumbers.ts";
 import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
-import { loadArcher, loadArrow, loadEnemy, loadScenery } from "./three/assets.ts";
+import { loadArcher, loadArrow, loadEnemy, loadHero, loadScenery } from "./three/assets.ts";
 import {
   createEnemies,
   separateEnemies,
@@ -44,24 +48,30 @@ import { updateEnemyAttacks, updateShooting } from "./game/combat.ts";
 /**
  * How high above the floor a health bar is projected from.
  *
- * Far above the heads (1.83 for the archer, 1.53 for a scaled robot) because
- * the camera looks down at 68 degrees: a world-space Y offset only moves
- * cos(68) = 0.37 of itself up the screen, so clearing a head by a visible gap
- * costs about three times that gap in world units.
+ * A little above the heads (1.83 for the archer, 1.53 for a scaled robot).
+ * A world-space Y offset moves cos(48.5) = 0.66 of itself up the screen, so
+ * clearing a head by a visible gap costs about half as much again in world
+ * units — where at the 78-degree camera this project briefly had, it cost
+ * five times and these numbers were over six.
  */
-const BAR_HEIGHT_PLAYER = 3.4;
-const BAR_HEIGHT_ENEMY = 3.1;
+const BAR_HEIGHT_PLAYER = 2.95;
+const BAR_HEIGHT_ENEMY = 2.65;
+
+/** Where a damage number starts, in world units above the body it belongs
+ *  to. Below the health bar, so the two do not overlap on the way up. */
+const HIT_NUMBER_HEIGHT = 2.1;
 
 async function boot(): Promise<void> {
   // The network decides when the ad may start (MRAID ready etc.).
   await adapter.ready();
-  const [archer, enemy, arrow, scenery] = await Promise.all([
+  const [hero, archer, enemy, arrow, scenery] = await Promise.all([
+    loadHero(),
     loadArcher(),
     loadEnemy(),
     loadArrow(),
     loadScenery(),
   ]);
-  const [tree, rock, mushroom] = scenery;
+  const [tree, rock, mushroom, pine] = scenery;
   const enemies = createEnemies();
   const spawner = createSpawner();
   const projectiles = createProjectiles();
@@ -74,7 +84,7 @@ async function boot(): Promise<void> {
   const grid = createGrid(obstacles, ENEMY_RADIUS);
 
   const world = new WorldScene(
-    { archer, enemy, arrow, scenery: { tree, rock, mushroom } },
+    { hero, archer, enemy, arrow, scenery: { tree, rock, mushroom, pine } },
     obstacles,
   );
 
@@ -90,11 +100,24 @@ async function boot(): Promise<void> {
   const bars = new HealthBars(enemies.length + 1);
   const endCard = new EndCard();
   const hand = new TutorialHand();
+  // Three values and no more: every arrow the player fires does ARROW_DAMAGE,
+  // and the player is only ever hit by a swing or an enemy arrow. Four labels
+  // each is more than can be in the air at once at these hit rates.
+  const numbers = new DamageNumbers(
+    [ARROW_DAMAGE, ENEMY_DAMAGE, ENEMY_ARROW_DAMAGE],
+    4,
+  );
+  // A hit is the frame a flash timer goes up, which is the same edge the
+  // white flash is drawn from. Built once; nothing here allocates per frame.
+  const lastEnemyFlash = enemies.map(() => 0);
+  let lastPlayerFlash = 0;
 
   // First child, so the haze sits over the 3D world and under every widget.
   app.stage.addChild(mist);
   app.stage.addChild(hud);
   app.stage.addChild(bars);
+  // Over the bars, under the stick: a number is the thing being read.
+  app.stage.addChild(numbers);
   app.stage.addChild(joystick);
   app.stage.addChild(hand);
   // Last, so it covers the joystick: the run is over, the stick is not live.
@@ -114,7 +137,14 @@ async function boot(): Promise<void> {
   app.stage.on("pointerdown", noteInput);
   window.addEventListener("keydown", noteInput, { once: true });
 
+  // The camera now moves, so the haze has to be re-anchored every frame
+  // rather than on resize — these are the last viewport the layout saw.
+  let screenW = 1;
+  let screenH = 1;
+
   onResize((w, h) => {
+    screenW = w;
+    screenH = h;
     world.resize(w, h);
     // Thumb-sized on a phone, not absurd on a desktop. Based on the shorter
     // side, so rotating changes where the joystick is, never how big.
@@ -124,14 +154,10 @@ async function boot(): Promise<void> {
     joystick.scale.set(scale);
     // Portrait: thumb-centre, below the room. Landscape: bottom-left, because
     // a centred stick there lands in the middle of the arena, on the archer.
-    joystick.x = w > h ? w * 0.18 : w / 2;
     // A fraction, not a pixel offset: this holds its place across aspect
     // ratios, and puts the stick over the play area rather than below it.
-    joystick.y = w > h ? h * 0.72 : h * 0.84;
-    // The near wall in screen pixels: where the land in front of the arena
-    // starts, and so where the haze starts. project() returns a shared object,
-    // so it is read before anything else can call it.
-    mist.layout(w, h, world.project(0, 0, ROOM_DEPTH / 2).y);
+    // Only where it *rests* — the base moves to the thumb on every touch.
+    joystick.place(w > h ? w * 0.18 : w / 2, w > h ? h * 0.72 : h * 0.84, w, h);
     hud.layout(w, h, scale);
     bars.layout(w, h);
     endCard.layout(w, h);
@@ -166,6 +192,25 @@ async function boot(): Promise<void> {
 
     // Views keep syncing and mixers keep advancing after the run ends, so the
     // room idles behind the card instead of freezing mid-stride.
+    //
+    // The camera is aimed first: the bars and the haze are placed from its
+    // projection, and aiming after them would place this frame's overlay
+    // against last frame's view.
+    world.follows(player.z, dt);
+    // The near wall in screen pixels: where the land in front of the arena
+    // starts, and so where the haze starts. Per frame now, because the camera
+    // travels — on resize only, the band would stay where the wall was at
+    // boot. project() returns a shared object, so it is read before anything
+    // else can call it.
+    // Both walls, read one at a time: project() hands back one shared
+    // object, so the near edge is taken before the far one overwrites it.
+    const nearEdge = world.project(0, 0, ROOM_DEPTH / 2).y;
+    mist.layout(
+      screenW,
+      screenH,
+      nearEdge,
+      world.project(0, 0, -ROOM_DEPTH / 2 - 4.6).y,
+    );
     hud.update(state.points, progress(state));
     world.syncPlayer(player);
     for (let i = 0; i < enemies.length; i++) {
@@ -179,7 +224,13 @@ async function boot(): Promise<void> {
     // each position is projected through the camera. project() returns a
     // shared object: read it before the next call.
     const head = world.project(player.x, BAR_HEIGHT_PLAYER, player.z);
-    bars.set(0, head.x, head.y, player.hp / PLAYER_HP, head.onScreen, false);
+    bars.set(0, head.x, head.y, player.hp / PLAYER_HP, head.onScreen, false, dt);
+    bars.setPlayerHp(player.hp);
+    if (player.hitFlash > lastPlayerFlash) {
+      const at = world.project(player.x, HIT_NUMBER_HEIGHT, player.z);
+      if (at.onScreen) numbers.pop(player.lastDamage, at.x, at.y);
+    }
+    lastPlayerFlash = player.hitFlash;
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
       const over = world.project(enemy.x, BAR_HEIGHT_ENEMY, enemy.z);
@@ -191,8 +242,17 @@ async function boot(): Promise<void> {
         enemy.hp / ENEMY_HP,
         standing && over.onScreen,
         true,
+        dt,
       );
+      if (enemy.hitFlash > lastEnemyFlash[i]) {
+        // project() hands back one shared object, so the bar's position is
+        // already consumed above before this overwrites it.
+        const at = world.project(enemy.x, HIT_NUMBER_HEIGHT, enemy.z);
+        if (at.onScreen) numbers.pop(ARROW_DAMAGE, at.x, at.y);
+      }
+      lastEnemyFlash[i] = enemy.hitFlash;
     }
+    numbers.advance(dt);
 
     world.update(dt);
     world.render();

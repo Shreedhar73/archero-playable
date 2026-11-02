@@ -2,36 +2,54 @@ import * as THREE from "three";
 import { type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { Player } from "../game/player.ts";
 import { action } from "./clips.ts";
-import { FIRE_INTERVAL } from "../config.ts";
+import { FIRE_INTERVAL, PLAYER_SCALE } from "../config.ts";
 
-/** Seconds to blend into the death pose. Long enough to read as a collapse
- *  rather than a cut, short enough that the end card is not waiting on it. */
+/** Seconds to blend into the death pose. */
 const DEATH_FADE = 0.15;
 
 /**
- * The archer's view: loaded model plus the animation state belonging to this
- * one instance.
- *
- * The bow is part of the model — it comes attached to the hand bone in
- * Mixamo's own with-bow export, which `scripts/fbx-merge.mjs` keeps intact —
- * so nothing here attaches a prop or carries a pose constant for one.
+ * Body turn rate, radians per second. `facing` in the state changes instantly
+ * so arrows leave in the asked direction; only the drawn body eases.
+ */
+const TURN_RATE = 18;
+
+const HIT_EMISSIVE = 0xffffff;
+/** Full-intensity white erases the body instead of highlighting it. */
+const FLASH_INTENSITY = 0.6;
+
+/**
+ * The player's view: model plus animation state. The bow is part of the model
+ * (parented to the left hand by `scripts/archero-merge.mjs`), so nothing here
+ * attaches a prop.
  */
 export class ArcherView {
-  /** Model plus the ring under it, so both follow the player with one
-   *  position write. */
+  /** Model plus the ring under it, moved together. */
   readonly root = new THREE.Group();
   private readonly mixer: THREE.AnimationMixer;
   private readonly idle: THREE.AnimationAction;
   private readonly run: THREE.AnimationAction;
   private readonly shoot: THREE.AnimationAction;
   private readonly death: THREE.AnimationAction;
-  /** Death is a one-shot, started on the transition rather than kept in sync
-   *  with a weight every frame. Same shape as the enemy's. */
   private wasDead = false;
   private lastShooting = 0;
+  /** Drawn yaw, chasing `player.facing`. Nothing in the sim reads it. */
+  private yaw = Number.NaN;
+  private wantYaw = 0;
+  private readonly materials: THREE.MeshStandardMaterial[] = [];
+  private readonly baseEmissive: number[] = [];
+  private readonly baseIntensity: number[] = [];
+  private wasFlashing = false;
 
   constructor(gltf: GLTF) {
     lift(gltf.scene);
+    gltf.scene.traverse((node) => {
+      if (!(node instanceof THREE.Mesh)) return;
+      if (!(node.material instanceof THREE.MeshStandardMaterial)) return;
+      this.materials.push(node.material);
+      this.baseEmissive.push(node.material.emissive.getHex());
+      this.baseIntensity.push(node.material.emissiveIntensity);
+    });
+    gltf.scene.scale.setScalar(PLAYER_SCALE);
     this.root.add(gltf.scene, marker());
     this.mixer = new THREE.AnimationMixer(gltf.scene);
     this.idle = action(this.mixer, gltf, "Idle");
@@ -41,67 +59,73 @@ export class ArcherView {
     this.idle.play();
     this.run.play();
     this.shoot.play();
-    // One full draw-and-release per shot. The clip is 0.70s and the archer
-    // fires every FIRE_INTERVAL, so playing it at its authored rate would cut
-    // the gesture off partway through every time.
+    // One full draw-and-release per FIRE_INTERVAL.
     this.shoot.timeScale = this.shoot.getClip().duration / FIRE_INTERVAL;
-    // Holds the last frame instead of snapping back to the bind pose, so the
-    // body stays down behind the end card.
+    // Hold the last frame so the body stays down behind the end card.
     this.death.setLoop(THREE.LoopOnce, 1);
     this.death.clampWhenFinished = true;
   }
 
   sync(player: Player): void {
-    // `shooting` decays every frame and jumps back up the moment a shot is
-    // fired, so a rise is the one signal the renderer gets that an arrow just
-    // left. Without this the action keeps looping on its own clock and each
-    // shot reveals a different, arbitrary frame of the draw.
+    // `shooting` decays each frame and jumps on a shot; the rise restarts the clip.
     if (player.shooting > this.lastShooting) this.shoot.reset().play();
     this.lastShooting = player.shooting;
 
     this.root.position.x = player.x;
     this.root.position.z = player.z;
-    this.root.rotation.y = player.facing;
+    // Snap on the first frame so there is no spin-up at boot.
+    this.wantYaw = player.facing;
+    if (Number.isNaN(this.yaw)) {
+      this.yaw = player.facing;
+      this.root.rotation.y = player.facing;
+    }
+
+    // Materials are written on the transition only.
+    const flashing = player.hitFlash > 0 && player.hp > 0;
+    if (flashing !== this.wasFlashing) {
+      for (let i = 0; i < this.materials.length; i++) {
+        this.materials[i].emissive.setHex(
+          flashing ? HIT_EMISSIVE : this.baseEmissive[i],
+        );
+        this.materials[i].emissiveIntensity = flashing
+          ? FLASH_INTENSITY
+          : this.baseIntensity[i];
+      }
+      this.wasFlashing = flashing;
+    }
 
     const dead = player.hp <= 0;
     if (dead && !this.wasDead) this.death.reset().fadeIn(DEATH_FADE).play();
     this.wasDead = dead;
 
-    // Shoot keys the upper body only, so blending it against Idle at equal
-    // weight would average a drawn bow with hanging arms and read as neither.
-    // It takes the body over instead — which costs nothing, because Archero
-    // only fires while standing still and the legs are already at rest.
+    // Shoot keys the upper body only; blending it with Idle averages a drawn
+    // bow with hanging arms. It takes over fully while shooting.
     const aiming = !dead && player.shooting > 0 ? 1 : 0;
     const locomotion = dead ? 0 : 1 - aiming;
     this.shoot.weight = aiming;
     this.death.weight = dead ? 1 : 0;
-    // Both locomotion clips always play; throttle mixes between them.
     this.run.weight = player.throttle * locomotion;
     this.idle.weight = (1 - player.throttle) * locomotion;
-    // Legs cycling at full speed while the body creeps is footskate.
+    // Slow the run cycle with the body to avoid footskate.
     this.run.timeScale = Math.max(player.throttle, 0.4);
   }
 
   advance(dt: number): void {
     this.mixer.update(dt);
+    if (Number.isNaN(this.yaw)) return;
+    // Wrap to (-PI, PI] so the turn takes the short way round.
+    let delta = (this.wantYaw - this.yaw) % (Math.PI * 2);
+    if (delta > Math.PI) delta -= Math.PI * 2;
+    if (delta < -Math.PI) delta += Math.PI * 2;
+    this.yaw += delta * (1 - Math.exp(-dt * TURN_RATE));
+    this.root.rotation.y = this.yaw;
   }
 
 }
 
 /**
- * The ring the reference draws under the hero.
- *
- * It is not decoration. This character's costume is nearly black and the
- * camera looks down at her hood, so from 50 units up she reads as a
- * silhouette on bright grass however hard she is lit — brightening the
- * material was measured and changed almost nothing, because multiplying a
- * black texel keeps it black. The reference solves the same problem the same
- * way: a bright disc under the player that says "this one is you" without
- * touching the model at all.
- *
- * Unlit on purpose, so it holds its colour wherever the player stands, and it
- * writes no depth — it is a decal lying on the floor, and anything standing
- * on it should win.
+ * Ring under the hero. The costume is nearly black from above, so this is what
+ * makes the player readable. Unlit and no depth write: a floor decal.
  */
 function marker(): THREE.Object3D {
   const group = new THREE.Group();
@@ -127,8 +151,7 @@ function marker(): THREE.Object3D {
 
   for (const mesh of [ring, fill]) {
     mesh.rotation.x = -Math.PI / 2;
-    // Clear of the floor plane, which is also at y = 0: coplanar geometry
-    // z-fights, and a flickering ring is worse than no ring.
+    // Lift off the floor plane at y = 0 to avoid z-fighting.
     mesh.position.y = 0.02;
     group.add(mesh);
   }
@@ -136,22 +159,16 @@ function marker(): THREE.Object3D {
 }
 
 /**
- * Undoes the grey baked into the model's baseColorFactor and lifts it a
- * little further.
- *
- * Three of its four materials carry 0.604, which multiplies an already dark
- * costume down by another 40%. Removing that is worth having, but it is not
- * what makes the player readable — the marker ring is. The textures
- * themselves are untouched.
- *
- * Materials are cloned before being changed. The enemy archers clone this
- * same GLTF afterwards, so they inherit the lift and then tint their own
- * copies on top of it — which is what keeps the two sides lit alike.
+ * Undoes the 0.604 grey baked into the model's baseColorFactor. Materials are
+ * cloned so other users of the same GLTF are not affected.
  */
 function lift(root: THREE.Object3D): void {
   const brighten = (material: THREE.Material): THREE.Material => {
     const copy = material.clone();
-    if (copy instanceof THREE.MeshStandardMaterial) copy.color.setScalar(1.35);
+    if (copy instanceof THREE.MeshStandardMaterial) {
+      // Multiply, not assign: the bow's wood has no map, and assigning turns it white.
+      copy.color.multiplyScalar(1.35);
+    }
     return copy;
   };
 

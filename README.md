@@ -62,6 +62,11 @@ re-layouts (`engine/resize.ts`), never restarts.
 The `assets/*.glb` the bundle inlines are committed; their sources are not,
 because the Mixamo downloads are tens of megabytes each.
 
+Scenery comes from the client's own mesh set — a canopy blob, a rock slab, a
+mushroom cap — with one exception: `low_poly_pine.glb` was downloaded, because
+that set has no conifer in it and the real game's trees are conifers. The blob
+stays in the scene as the bushes it actually looks like.
+
 ```sh
 npm run convert       # assets/raw/*.fbx -> intermediate glbs (headless Chromium)
 npm run archer        # convert, then merge into assets/archer_playable.glb
@@ -82,4 +87,12 @@ npm install
 npm run dev      # vite on :8080
 npm run check    # tsc --noEmit
 npm run build    # check + all network builds + size gates
+npm run shot     # screenshot the running game at any viewport
+npm run walk     # drive it across the room and shoot both ends
 ```
+
+`walk` exists because `shot` only ever photographs a standing archer, which
+is the one case where a camera that follows the player looks identical to a
+fixed one. It holds `w` and then `s` and shoots the far wall, the near wall
+and the settled frame. Its holds are long on purpose: headless Chromium
+renders WebGL on the CPU, so the game runs well under real time.

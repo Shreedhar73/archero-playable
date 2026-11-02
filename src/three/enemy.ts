@@ -6,8 +6,10 @@ import {
   Group,
   LoopOnce,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  RingGeometry,
 } from "three";
 import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import {
@@ -22,7 +24,28 @@ import { action } from "./clips.ts";
 import type { Enemy, EnemyKind } from "../game/enemy.ts";
 
 /** Flash colour for a hit. Bright enough to read for the two frames it lasts. */
-const HIT_EMISSIVE = 0xff3a1a;
+/**
+ * White, not red. The real game flashes a struck body to white; red is
+ * already the enemy archers' own tint, so flashing them red said "this one is
+ * an archer" at exactly the moment it needed to say "this one was hit".
+ */
+const HIT_EMISSIVE = 0xffffff;
+/** Enough to read as a flash, short of painting the body out. */
+const FLASH_INTENSITY = 0.6;
+
+/**
+ * How long before a blow lands the warning arc appears, in seconds.
+ *
+ * The real game sweeps a red arc under an enemy that is about to strike, and
+ * it is the only reason its melee is dodgeable rather than unfair. Read off
+ * the attack cooldown in the view — `enemy.attacking` is already true exactly
+ * when a body is in range with a clear line — so no windup state goes into
+ * the simulation for an effect only the renderer cares about.
+ */
+const TELEGRAPH = 0.45;
+
+/** One ring, shared: every warning is the same shape at a different scale. */
+const warningGeometry = new RingGeometry(0.42, 0.56, 24);
 
 /**
  * Everything that differs between the two enemy kinds: which model they are,
@@ -61,15 +84,23 @@ class EnemyView {
    *  at zero weight like the looping clips. */
   private wasDying = false;
   private wasFlashing = false;
+  private readonly bodyScale: number;
   /** SkeletonUtils.clone shares materials between clones, so tinting or
    *  flashing one enemy would do it to every one of them. Each view needs its
    *  own copies. */
   private readonly materials: MeshStandardMaterial[] = [];
   private readonly baseEmissive: number[] = [];
+  /** Restored with the colour: the flash sets both, because a white emissive
+   *  at the archers' own intensity blows the whole body out to a silhouette
+   *  and the hit stops being legible as a hit. */
+  private readonly baseIntensity: number[] = [];
+  private readonly warning: Mesh;
+  private readonly warningMaterial: MeshBasicMaterial;
 
   constructor(spec: KindSpec) {
     this.root = clone(spec.gltf.scene);
     this.root.scale.setScalar(spec.scale);
+    this.bodyScale = spec.scale;
     this.root.visible = false;
 
     this.root.traverse((node) => {
@@ -79,11 +110,31 @@ class EnemyView {
       const copy = node.material.clone();
       node.material = copy;
       // Lerped rather than replaced, so the model's own light and dark parts
-      // stay distinguishable instead of flattening into one colour.
+      // stay distinguishable instead of flattening into one colour. Colour
+      // only: driving the emissive from the tint as well was tried and
+      // rejected — emission ignores the light, so the bodies came out as
+      // flat red cut-outs with no shading left to say which way they faced.
       if (spec.tint !== null) copy.color.lerp(spec.tint, ENEMY_ARCHER_TINT_MIX);
       this.materials.push(copy);
       this.baseEmissive.push(copy.emissive.getHex());
+      this.baseIntensity.push(copy.emissiveIntensity);
     });
+
+    // Parented to the body so it follows with one position write, and scaled
+    // against the body's own scale so the two kinds get the same-sized ring
+    // rather than one proportional to how big the model happens to be.
+    this.warningMaterial = new MeshBasicMaterial({
+      color: 0xff3b2e,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    });
+    this.warning = new Mesh(warningGeometry, this.warningMaterial);
+    this.warning.rotation.x = -Math.PI / 2;
+    this.warning.position.y = 0.025 / spec.scale;
+    this.warning.scale.setScalar(1 / spec.scale);
+    this.warning.visible = false;
+    this.root.add(this.warning);
 
     this.mixer = new AnimationMixer(this.root);
     this.idle = action(this.mixer, spec.gltf, spec.idle);
@@ -122,8 +173,22 @@ class EnemyView {
         this.materials[i].emissive.setHex(
           flashing ? HIT_EMISSIVE : this.baseEmissive[i],
         );
+        this.materials[i].emissiveIntensity = flashing
+          ? FLASH_INTENSITY
+          : this.baseIntensity[i];
       }
       this.wasFlashing = flashing;
+    }
+
+    // The arc fills as the blow approaches: at the moment it is solid, the
+    // hit lands. A ring that simply appears says "something is happening";
+    // one that closes says "now".
+    const winding = !dying && enemy.attacking && enemy.attackCooldown < TELEGRAPH;
+    this.warning.visible = winding;
+    if (winding) {
+      const ready = 1 - Math.max(0, enemy.attackCooldown) / TELEGRAPH;
+      this.warningMaterial.opacity = 0.28 + 0.5 * ready;
+      this.warning.scale.setScalar((1.25 - 0.3 * ready) / this.bodyScale);
     }
 
     const attacking = !dying && enemy.attacking;

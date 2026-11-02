@@ -12,7 +12,7 @@ import {
   SHOOT_POSE,
 } from "../config.ts";
 import { clearShot } from "./collision.ts";
-import type { Enemy } from "./enemy.ts";
+import { HIT_FLASH_TIME, type Enemy } from "./enemy.ts";
 import type { Player } from "./player.ts";
 import { fireProjectile, type Projectile } from "./projectiles.ts";
 import type { Obstacle } from "./obstacles.ts";
@@ -39,6 +39,9 @@ export function updateShooting(
 ): void {
   player.fireCooldown -= dt;
   player.shooting = Math.max(0, player.shooting - dt);
+  // Decayed beside the shoot pose because they are the same kind of thing: a
+  // countdown the renderers read and the simulation never branches on.
+  player.hitFlash = Math.max(0, player.hitFlash - dt);
   // Moving cancels the pose outright: the archer cannot run with the bow
   // drawn, and letting the clip finish while sprinting reads as a stutter.
   if (player.throttle > 0) player.shooting = 0;
@@ -153,6 +156,8 @@ export function updateEnemyAttacks(
       enemy.attackCooldown = ENEMY_SHOT_INTERVAL;
     } else {
       player.hp = Math.max(0, player.hp - ENEMY_DAMAGE);
+      player.hitFlash = HIT_FLASH_TIME;
+      player.lastDamage = ENEMY_DAMAGE;
       enemy.attackCooldown = ENEMY_ATTACK_INTERVAL;
     }
   }

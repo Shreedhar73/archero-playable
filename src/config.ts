@@ -9,10 +9,30 @@ export const STORE_URLS = {
 
 export const PLAYER_SPEED = 3; // units per second
 
-/** Room footprint. Taller than wide, as in the reference (~1:1.3) — enough to
- *  read as an Archero arena, shallow enough to still frame in landscape. */
+/**
+ * How fast the player's velocity closes on what the stick is asking for, per
+ * second. Braking is faster than accelerating.
+ *
+ * The real game's player leans into a turn and settles out of it instead of
+ * changing direction on one frame, and that easing is a good part of what
+ * the recording reads as smooth. Short enough that nobody can feel a delay
+ * between the thumb and the body: at 18, 0.15 s covers 93% of the change.
+ */
+export const PLAYER_ACCEL = 18;
+export const PLAYER_BRAKE = 26;
+
+/**
+ * Room footprint. Taller than wide, as in the reference.
+ *
+ * 16, derived rather than chosen — see `src/three/camera.ts`. The arena
+ * covers 96% of a portrait screen's width and 59% of its height in the
+ * recording, which at 9 units wide makes the foreshortened depth 12.0 units
+ * of screen; at the measured 48.5-degree elevation that is a room 16 deep.
+ * The user was right that the fight ground reads longer than ours did: it is,
+ * by a third.
+ */
 export const ROOM_WIDTH = 9;
-export const ROOM_DEPTH = 12;
+export const ROOM_DEPTH = 16;
 
 export const PLAYER_RADIUS = 0.3; // units, for collision detection
 
@@ -42,7 +62,22 @@ export const ENEMY_KINDS = [
 export const ENEMY_COUNT = ENEMY_KINDS.length;
 
 /** Ememy height of glb is 4.791 untits, archer is 1.832, so we need to scale down enemy */
-export const ENEMY_SCALE = 0.32;
+export const ENEMY_SCALE = 0.18;
+
+/**
+ * How big the player's model is drawn. Visual only — `PLAYER_RADIUS` is what
+ * the simulation collides with, and it does not move.
+ *
+ * Measured against the recording: their hero is about 9.6% of the arena's
+ * width on screen and ours was 6.9%, which is why our room read as empty.
+ * This is the cheaper half of the fix — the other half would be a narrower
+ * room, and the room was just asked to get longer.
+ *
+ * 1.15, not the 1.35 this started at: that was set under a 78-degree camera
+ * which flattened everything, and at the measured 48.5 the same model shows
+ * its full height.
+ */
+export const PLAYER_SCALE = 0.85;
 
 /** Emeny  speed */
 export const ENEMY_SPEED = 1.6;
@@ -154,7 +189,7 @@ export const ENEMY_BACKPEDAL = 0.8;
  * camera distance both read as "dark figure with a bow" — hence a strong mix
  * toward a saturated red. Scale helps a little, colour does the rest.
  */
-export const ENEMY_ARCHER_SCALE = 0.82;
+export const ENEMY_ARCHER_SCALE = 0.58;
 export const ENEMY_ARCHER_TINT = 0xff3b2e;
 
 export const ENEMY_ARCHER_TINT_MIX = 0.82;

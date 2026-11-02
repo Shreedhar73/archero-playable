@@ -3,7 +3,6 @@ import {
   BufferAttribute,
   type BufferGeometry,
   Color,
-  CylinderGeometry,
   Group,
   InstancedMesh,
   Matrix4,
@@ -24,6 +23,8 @@ export interface SceneryAssets {
   tree: GLTF;
   rock: GLTF;
   mushroom: GLTF;
+  /** Not from the client's set — see `Scenery.kinds`. */
+  pine: GLTF;
 }
 
 /** Fixed seed: the scatter is part of the art, so it must look the same every
@@ -54,16 +55,22 @@ interface Zone {
 }
 
 const ZONES: Zone[] = [
-  // Beyond the far wall: the top of a portrait screen, under the HUD.
-  { minX: -7, maxX: 7, minZ: -8.8, maxZ: -6.3, weight: 5, mirror: false },
+  // Beyond the far wall: the top of a portrait screen, under the HUD. Split
+  // around the middle rather than spanning it, because the gate stands there
+  // now (`WorldScene.addGate`) and a copse in front of a doorway is a copse
+  // in front of the one landmark the room has.
+  { minX: 4.8, maxX: 9, minZ: -11, maxZ: -7.2, weight: 3, mirror: true },
   // In front of the near wall: the bottom of a portrait screen, where the
   // mist takes over (`src/ui/mist.ts`).
-  { minX: -7, maxX: 7, minZ: 6.3, maxZ: 12.5, weight: 3, mirror: false },
-  // Right against the side walls. Portrait sees barely half a unit past them,
-  // so this is the only flank band it ever shows — and it has to be its own
-  // zone, or a wide flank band spends its clusters where only landscape looks.
-  { minX: 5.1, maxX: 6.4, minZ: -9, maxZ: 13, weight: 4, mirror: true },
-  { minX: 6.4, maxX: 9.5, minZ: -9, maxZ: 13, weight: 2, mirror: true },
+  { minX: -7, maxX: 7, minZ: 7.3, maxZ: 14, weight: 4, mirror: false },
+  // Right against the side walls, and now overlapping them: at this framing
+  // portrait sees only 0.09 units of ground past the wall, so a band that
+  // started clear of it put every tree off the side of the screen. The real
+  // game has conifers hugging both screen edges in every frame, and they get
+  // there by leaning over the rim — the trunk outside, the canopy inside.
+  // This is the band that does the most work in portrait, hence the weight.
+  { minX: 4.5, maxX: 6.3, minZ: -13, maxZ: 17, weight: 12, mirror: true },
+  { minX: 6.3, maxX: 9.5, minZ: -13, maxZ: 17, weight: 2, mirror: true },
   // The outer flanks, which only landscape ever sees.
   { minX: 9.5, maxX: 14, minZ: -8, maxZ: 8, weight: 2, mirror: true },
 ];
@@ -73,7 +80,17 @@ const ZONE_TOTAL = ZONES.reduce((sum, zone) => sum + zone.weight, 0);
 /** Keep-out around the room. Tight on purpose: the reference lets canopies
  *  lean over the rim, and these sit a plinth's depth lower than the floor, so
  *  overlapping the wall reads as depth rather than as a mistake. */
-const CLEARANCE = 0.6;
+/**
+ * Keep-out around the room, measured from the wall.
+ *
+ * Zero: a trunk may stand right against the outside of the wall, which is
+ * what puts the canopy over the rim. Portrait sees only 0.09 units of ground
+ * past the side wall, so anything that clears the room properly is a sliver
+ * at the screen edge or off it entirely — and the real game's trees are not
+ * slivers, they lean well into the frame. Nothing can get *inside* the room
+ * whatever this is: `findSpot` rejects the room's own footprint outright.
+ */
+const CLEARANCE = 0;
 
 /**
  * One piece of a prop, in fractions of the prop's own height.
@@ -106,6 +123,17 @@ interface Part {
 
 interface PropKind {
   parts: Part[];
+  /**
+   * Hand-placed spots, as `[x, z, height]`. When present the scatter is not
+   * used at all.
+   *
+   * Art direction, not procedural variety. The real game shows about three
+   * trees against the arena at any moment — two down one side, one down the
+   * other — and at that count a weighted random scatter is a lottery: one
+   * seed clumps all three below the near wall and leaves both flanks bare.
+   * Scatter is right for forty rocks and wrong for three trees.
+   */
+  fixed?: [number, number, number][];
   /** Props are placed in copses, not sprinkled: an even scatter reads as a
    *  texture, and clumps read as a wood. */
   clusters: number;
@@ -158,7 +186,17 @@ export class Scenery {
     for (const kind of this.kinds(assets)) {
       // Every part of a prop reads the same spots, which is what keeps a
       // trunk under its own canopy.
-      const spots = this.scatter(random, kind);
+      const spots =
+        kind.fixed === undefined
+          ? this.scatter(random, kind)
+          : kind.fixed.map(([x, z, height]) => ({
+              x,
+              z,
+              height,
+              stretch: range(random, 0.9, 1.12),
+              angle: range(random, 0, Math.PI * 2),
+              shade: random(),
+            }));
 
       for (const part of kind.parts) {
         const mesh = new InstancedMesh(
@@ -248,69 +286,130 @@ export class Scenery {
   }
 
   private kinds(assets: SceneryAssets): PropKind[] {
-    // The canopy blob from the game's own meshes: 158 triangles, and its
-    // green is in COLOR_0, so the materials only have to let it through and
-    // tint it. A cone would be cheaper still, and from a 68-degree camera it
-    // reads as a pinwheel — the silhouette is the whole point.
+    // Two tree meshes, and neither is interchangeable with the other.
+    //
+    // The client's set has exactly one tree-ish mesh and it is a *blob* —
+    // 0.58 x 0.56 x 0.40, one rounded mass, its green in COLOR_0. The real
+    // game's trees are conifers: a tiered cone of drooping fronds, lighter
+    // towards the top. Stacking the blob into tiers was tried and reads as
+    // broccoli, and building the tiers out of cones reads as cones. So the
+    // pine is a downloaded low-poly model (needles and trunk, 25 KB through
+    // the pipeline) and the client's blob stays in the scene as what it
+    // actually is: the round bushes that grow between the pines.
     const canopy = prop(assets.tree);
-    const leaf = (): MeshStandardMaterial =>
+    const [needles, trunk] = propParts(assets.pine);
+    // The blob carries its green in COLOR_0, so its material has to let
+    // vertex colours through. The pine does not have the attribute at all,
+    // and `vertexColors` on a geometry without one renders it black. Both
+    // still take their variation from the instance colour buffer.
+    const blobLeaf = (): MeshStandardMaterial =>
       new MeshStandardMaterial({ vertexColors: true, roughness: 1 });
 
     return [
       {
+        // The pine, as two parts rather than one, so needles and trunk can be
+        // tinted apart. `propParts` normalised them against a shared box, so
+        // both are placed by base 0, height 1, width 1 — the model already
+        // holds its own proportions.
         parts: [
           {
-            // Six sides, because nothing at this distance resolves more. The
-            // sliver of trunk under the canopy is what stops a tree reading
-            // as a bush lying on the grass.
-            geometry: new CylinderGeometry(0.17, 0.24, 1, 6).translate(
-              0,
-              0.5,
-              0,
-            ),
-            material: new MeshStandardMaterial({ roughness: 1 }),
+            geometry: needles.geometry,
+            material: needles.material,
             base: 0,
-            height: 0.5,
+            height: 1,
             width: 1,
-            from: new Color(0x6b4a2c),
-            to: new Color(0x7d5a34),
-            shadow: false,
-          },
-          {
-            geometry: canopy,
-            material: leaf(),
-            base: 0.24,
-            height: 0.6,
-            width: 1,
-            // Dark, as the reference's surround foliage is: outside the arena
-            // everything sits in shade, and the arena is what should read lit.
-            from: new Color(0x2f5a21),
-            to: new Color(0x44742b),
+            // The reference's trees are a bright mid-green, darker at the
+            // skirt than at the tip. The spread across the range is what
+            // stops a stand of them looking like one tree stamped out nine
+            // times.
+            from: new Color(0x3f8f33),
+            to: new Color(0x63b84a),
             // The one piece that casts: it is the widest part of the tree, so
             // its shadow is the tree's shadow.
             shadow: true,
           },
           {
-            geometry: canopy,
-            material: leaf(),
-            base: 0.58,
-            height: 0.46,
-            width: 0.72,
-            // A shade lighter than the layer below: this is the part the sun
-            // reaches, and the step between them is the volume.
-            from: new Color(0x47772c),
-            to: new Color(0x5e9336),
+            geometry: trunk.geometry,
+            material: trunk.material,
+            base: 0,
+            height: 1,
+            width: 1,
+            from: new Color(0x7a5a38),
+            to: new Color(0x96724a),
             shadow: false,
           },
         ],
-        clusters: 42,
-        minPer: 2,
-        maxPer: 4,
-        spread: 1.3,
-        minHeight: 2.3,
-        maxHeight: 3.6,
-        // Taller than wide: a canopy as broad as the tree is high is a bush.
-        widthRatio: 0.62,
+        // Counted off the recording rather than chosen: at any moment the
+        // real game shows about two pines down one side of the arena, one
+        // down the other, and a thin scatter beyond the walls — not a
+        // forest. An earlier pass put roughly two hundred out there and the
+        // arena read as a clearing hacked out of woodland, which is the
+        // opposite of a bright room with trees at its edges.
+        //
+        // The room is 9 by 12, so x = +-4.5 is the wall. The three against
+        // it stand just outside and lean in; the rest sit beyond the near
+        // and far walls, clear of the gate.
+        // A trunk at 4.95 is a tenth of a unit clear of the plinth rim, and
+        // portrait sees to x = 4.59 — so what shows of a side tree is the
+        // inner third of its canopy, which is what the recording shows too.
+        // Height is doing the rest of the work: the taller the pine, the
+        // wider the canopy and the more of it reaches over the wall.
+        fixed: [
+          [4.95, -3.0, 6.4],
+          [4.95, 4.1, 5.8],
+          [-4.95, 0.6, 6.1],
+          [-6.4, 8.7, 5.0],
+          [-2.9, 10.5, 4.2],
+          [3.0, 9.6, 4.8],
+          [6.3, 11.2, 4.0],
+          [-7.0, -8.5, 4.4],
+          [7.1, -8.9, 4.1],
+        ],
+        clusters: 0,
+        minPer: 0,
+        maxPer: 0,
+        spread: 0,
+        minHeight: 3.2,
+        maxHeight: 5.4,
+        // 1, not a tree-ish fraction: the model is 7.5 wide against 16.1 tall
+        // and `propParts` normalised it to unit height, so it already carries
+        // its own proportions. Multiplying by a second ratio squashed every
+        // pine to a spike.
+        widthRatio: 1,
+      },
+      {
+        // The client's own blob, used as the bush it is. Fewer and lower
+        // than the conifers, so they read as undergrowth between them rather
+        // than as a second kind of tree.
+        parts: [
+          {
+            geometry: canopy,
+            material: blobLeaf(),
+            base: 0,
+            height: 0.78,
+            width: 1,
+            from: new Color(0x4a8a33),
+            to: new Color(0x62a843),
+            shadow: true,
+          },
+          {
+            geometry: canopy,
+            material: blobLeaf(),
+            base: 0.46,
+            height: 0.6,
+            width: 0.74,
+            from: new Color(0x5c9f3c),
+            to: new Color(0x74ba4e),
+            shadow: false,
+          },
+        ],
+        clusters: 7,
+        minPer: 1,
+        maxPer: 2,
+        spread: 1,
+        minHeight: 0.85,
+        maxHeight: 1.5,
+        widthRatio: 1.2,
       },
       {
         parts: [
@@ -325,9 +424,9 @@ export class Scenery {
             shadow: false,
           },
         ],
-        clusters: 16,
+        clusters: 9,
         minPer: 1,
-        maxPer: 3,
+        maxPer: 2,
         spread: 0.9,
         minHeight: 0.3,
         maxHeight: 0.65,
@@ -370,6 +469,75 @@ function pickZone(random: () => number): Zone {
     if (ticket <= 0) return zone;
   }
   return ZONES[ZONES.length - 1];
+}
+
+/**
+ * Every mesh in a GLTF, baked into geometries that *together* stand one unit
+ * tall, sit on y = 0 and are centred on x/z.
+ *
+ * Normalised against the shared bounding box rather than each mesh's own, so
+ * a model built from more than one piece keeps them in the right places
+ * relative to each other — a trunk normalised on its own would come out the
+ * same height as the tree it holds up. Returned tallest-first, which for a
+ * tree is foliage then trunk.
+ */
+function propParts(gltf: GLTF): PropPart[] {
+  gltf.scene.updateWorldMatrix(true, true);
+
+  const parts: PropPart[] = [];
+  gltf.scene.traverse((node) => {
+    if (!(node instanceof Mesh)) return;
+    const geometry = node.geometry.clone();
+    widen(geometry, "position");
+    widen(geometry, "normal");
+    geometry.applyMatrix4(node.matrixWorld);
+    // The model's own material, kept rather than replaced: unlike the
+    // client's rip this one ships textures, and they are already paid for in
+    // the bundle. Cloned because the instance tint writes through it.
+    const material = (
+      Array.isArray(node.material) ? node.material[0] : node.material
+    ).clone() as MeshStandardMaterial;
+    material.roughness = 1;
+    material.metalness = 0;
+    // The map is dropped on purpose. The instance colour *multiplies* the
+    // texture, so with a dark one no tint can reach the bright mid-green the
+    // reference's trees are — and the pine's is a dark teal. Flat colour per
+    // instance gets there, matches how every other prop here is coloured,
+    // and takes the two baked textures out of the bundle with it.
+    material.map = null;
+    parts.push({ geometry, material });
+  });
+  if (parts.length === 0) throw new Error("scenery prop has no mesh");
+  const geometries = parts.map((part) => part.geometry);
+
+  const shared = new Box3();
+  for (const geometry of geometries) {
+    shared.union(
+      new Box3().setFromBufferAttribute(
+        geometry.getAttribute("position") as BufferAttribute,
+      ),
+    );
+  }
+  const size = shared.getSize(new Vector3());
+  const centre = shared.getCenter(new Vector3());
+  const unit = 1 / Math.max(size.y, 1e-6);
+  for (const geometry of geometries) {
+    geometry.translate(-centre.x, -shared.min.y, -centre.z);
+    geometry.scale(unit, unit, unit);
+  }
+
+  parts.sort((a, b) => {
+    a.geometry.computeBoundingBox();
+    b.geometry.computeBoundingBox();
+    return (b.geometry.boundingBox?.max.y ?? 0) - (a.geometry.boundingBox?.max.y ?? 0);
+  });
+  return parts;
+}
+
+/** One mesh of a multi-part prop, with the material it shipped with. */
+interface PropPart {
+  geometry: BufferGeometry;
+  material: MeshStandardMaterial;
 }
 
 /**

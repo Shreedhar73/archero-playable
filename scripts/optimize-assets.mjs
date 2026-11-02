@@ -59,6 +59,11 @@ const KEEP_CLIPS = {
   "tree.glb": [],
   "rock.glb": [],
   "mushroom.glb": [],
+  // The pine is not from the client's set — it was downloaded because that
+  // set has no conifer in it, only a canopy blob, and the real game's trees
+  // are conifers. Two meshes, needles and trunk, and it is the one scenery
+  // prop that does carry textures.
+  "low_poly_pine.glb": [],
 };
 
 /** Files whose vertex attributes must survive prune. `keepAttributes: false`

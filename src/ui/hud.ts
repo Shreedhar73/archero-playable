@@ -2,19 +2,12 @@ import { Container, Graphics, Text } from "pixi.js";
 import { ENEMIES_TO_KILL } from "../config.ts";
 import { clamp } from "../engine/math.ts";
 
-const BAR_HEIGHT = 18;
+const BAR_HEIGHT = 26;
 const MARGIN = 16;
 
 /**
- * Level progress bar and the points counter.
- *
- * The bar is progress through the level, not health — the player's health is
- * the floating bar over their head. Pure presentation: it is handed numbers
- * and draws them, so nothing here can change the game.
- *
- * Layout is a separate call from update, because layout runs on resize and
- * update runs every frame. Mixing them would rebuild geometry sixty times a
- * second to no effect.
+ * Level progress bar and points counter. The bar is level progress, not health.
+ * Layout runs on resize, update every frame; keep them separate.
  */
 export class Hud extends Container {
   private readonly points: Text;
@@ -42,10 +35,10 @@ export class Hud extends Container {
       text: "Lv.1",
       style: {
         fill: 0xffffff,
-        fontSize: 13,
-        fontWeight: "700",
+        fontSize: 16,
+        fontWeight: "900",
         fontFamily: "Arial, Helvetica, sans-serif",
-        stroke: { color: 0x5a3b12, width: 3 },
+        stroke: { color: 0x4a2f0c, width: 4 },
       },
     });
     this.level.anchor.set(0.5);
@@ -56,19 +49,21 @@ export class Hud extends Container {
     this.addChild(this.points);
   }
 
-  /** Called from onResize only. Sized off the shorter side, so landscape does
-   *  not stretch the bar into something that reads as a loading indicator. */
+  /** Called from onResize only. Sized off the shorter side so landscape does not stretch it. */
   layout(w: number, h: number, scale: number): void {
-    this.barWidth = clamp(Math.min(w, h) * 0.42, 140, 300);
+    this.barWidth = clamp(Math.min(w, h) * 0.62, 180, 380);
     this.scale.set(scale);
     this.barBack
       .clear()
       .roundRect(0, 0, this.barWidth, BAR_HEIGHT, BAR_HEIGHT / 2)
-      .fill({ color: 0x000000, alpha: 0.45 });
-    this.barBack.position.set(MARGIN, MARGIN);
-    this.barFill.position.set(MARGIN, MARGIN);
-    this.level.position.set(MARGIN + this.barWidth / 2, MARGIN + BAR_HEIGHT / 2);
-    this.points.position.set(w / scale - MARGIN, MARGIN - 4);
+      .fill({ color: 0x24301a, alpha: 0.72 })
+      .roundRect(0, 0, this.barWidth, BAR_HEIGHT, BAR_HEIGHT / 2)
+      .stroke({ color: 0x0f1a0a, width: 3, alpha: 0.65 });
+    const left = (w / scale - this.barWidth) / 2;
+    this.barBack.position.set(left, MARGIN);
+    this.barFill.position.set(left, MARGIN);
+    this.level.position.set(left + this.barWidth / 2, MARGIN + BAR_HEIGHT / 2);
+    this.points.position.set(w / scale - MARGIN, MARGIN - 2);
     // Force the next update to redraw against the new width.
     this.drawn = -1;
   }
@@ -89,8 +84,16 @@ export class Hud extends Container {
         BAR_HEIGHT,
         BAR_HEIGHT / 2,
       )
-      // Amber, so it reads as experience rather than health.
-      .fill({ color: 0xf5a623 });
+      // Amber so it reads as experience, not health. The lighter band gives it roundness.
+      .fill({ color: 0xf5a623 })
+      .roundRect(
+        3,
+        3,
+        Math.max(BAR_HEIGHT, this.barWidth * progress) - 6,
+        BAR_HEIGHT * 0.34,
+        BAR_HEIGHT * 0.17,
+      )
+      .fill({ color: 0xffd27a, alpha: 0.75 });
   }
 
   /** Kills remaining, for anything that wants to show the goal. */
