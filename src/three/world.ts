@@ -86,7 +86,20 @@ const projected: Projected = { x: 0, y: 0, onScreen: false };
  * long in z, which the 48.5-degree camera foreshortens back towards square.
  */
 const IMAGE_W = 1200;
-const IMAGE_H = 2100;
+/**
+ * 2529, not the source painting's 2100: `scripts/build-arena.py` grows the
+ * canvas by 429 rows of flat surround green and draws the near border the
+ * painting never had.
+ *
+ * It had to. FIELD.y1 is the near wall and it used to be the image's last
+ * row, so the arena's bottom row of checker was what `ClampToEdgeWrapping`
+ * repeated over the four units of ground between the wall and GROUND_NEAR —
+ * four units of painted arena in front of an arena that stops at the wall,
+ * with the trees and rocks `Scenery` correctly placed outside the room
+ * standing on top of it. The field keeps its own coordinates; only what lies
+ * past its near edge is new.
+ */
+const IMAGE_H = 2529;
 const FIELD = { x0: 93, y0: 465, x1: 1127, y1: 2100 };
 /** The ruins, and the row their feet stand on. */
 const RUINS = { x0: 85, y0: 0, x1: 1075, y1: 345 };
@@ -109,12 +122,30 @@ const vAt = (z: number): number => 1 - (z / PX_Z + ROW_0) / IMAGE_H;
  * Wider and longer than the painting, on purpose: the UVs run past 0 and 1 at
  * the sides and `ClampToEdgeWrapping` repeats the painting's own outermost
  * column, which along the arena is flat surround green. That is the padding,
- * and it costs no pixels. It is also why the near end is the honest weak
- * point — the painting is cut off there, so what clamping repeats towards the
- * camera is the last row of checker rather than a boundary.
+ * and it costs no pixels.
+ *
+ * The near end used to be the honest weak point, because what clamping
+ * repeated towards the camera was the plate's last row of arena checker. It
+ * is not any more — see IMAGE_H: the plate carries a near border and an apron
+ * of surround green that reaches past GROUND_NEAR, so clamping repeats flat
+ * green or nothing at all.
  */
 const GROUND_HALF_W = 11;
-const GROUND_NEAR = 12;
+/**
+ * 20, three times the four units it used to reach past the near wall.
+ *
+ * The plate's apron is only 4.2 units long, and it does not have to be any
+ * longer: its last row is flat surround green by construction, so what
+ * `ClampToEdgeWrapping` repeats over the remaining eight units is that one
+ * colour. Extending the *mesh* costs two triangles and extending the
+ * *texture* would cost rows of a single flat value.
+ *
+ * It is worth having because the camera reaches further than the old ground
+ * did. At the near end of its travel the bottom of a portrait screen is
+ * z = 17.8, so everything past 12 was `scene.background` showing through —
+ * the right colour, but flat, with nothing standing on it.
+ */
+const GROUND_NEAR = 20;
 
 const FLOOR_Y = 0;
 
@@ -184,11 +215,7 @@ function rectUv(
 ): void {
   const uv = geometry.attributes.uv;
   for (let i = 0; i < uv.count; i++) {
-    uv.setXY(
-      i,
-      u0 + uv.getX(i) * (u1 - u0),
-      v0 + uv.getY(i) * (v1 - v0),
-    );
+    uv.setXY(i, u0 + uv.getX(i) * (u1 - u0), v0 + uv.getY(i) * (v1 - v0));
   }
 }
 
@@ -506,7 +533,8 @@ export class WorldScene {
     const target = clamp(playerZ + CAMERA_LEAD, min, max);
     this.follow = Number.isNaN(this.follow)
       ? target
-      : this.follow + (target - this.follow) * (1 - Math.exp(-dt * FOLLOW_RATE));
+      : this.follow +
+        (target - this.follow) * (1 - Math.exp(-dt * FOLLOW_RATE));
     aimCamera(this.camera, this.follow);
     // project() reads matrixWorldInverse, which the renderer only refreshes
     // at render time — too late for everything that projects this frame.

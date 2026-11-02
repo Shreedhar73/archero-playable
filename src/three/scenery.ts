@@ -61,9 +61,12 @@ const ZONES: Zone[] = [
   // now (`WorldScene.addGate`) and a copse in front of a doorway is a copse
   // in front of the one landmark the room has.
   { minX: 4.8, maxX: 9, minZ: -11, maxZ: -7.2, weight: 3, mirror: true },
-  // In front of the near wall: the bottom of a portrait screen, where the
-  // mist takes over (`src/ui/mist.ts`).
-  { minX: -7, maxX: 7, minZ: 7.3, maxZ: 14, weight: 4, mirror: false },
+  // There is deliberately no zone in front of the near wall. The reference
+  // frame's land below the arena is empty: a clean band of grass, then two
+  // small conifers in fog, and no rocks, bushes or mushrooms anywhere in it.
+  // This zone used to put all three right under the near lip, where they are
+  // the largest and sharpest things on screen because nothing is between
+  // them and the camera. The two conifers are hand-placed with the rest.
   // Right against the side walls, and now overlapping them: at this framing
   // portrait sees only 0.09 units of ground past the wall, so a band that
   // started clear of it put every tree off the side of the screen. The real
@@ -398,10 +401,22 @@ export class Scenery {
           [4.95, -3.0, 6.4],
           [4.95, 4.1, 5.8],
           [-4.95, 0.6, 6.1],
-          [-6.4, 8.7, 5.0],
-          [-2.9, 10.5, 4.2],
-          [3.0, 9.6, 4.8],
-          [6.3, 11.2, 4.0],
+          // The two in front of the near wall, measured off the reference
+          // frame rather than scattered. Its arena is 1131 px wide for nine
+          // units, so 125.7 px a unit: both tree centres sit at |x| = 3.7,
+          // their tops land 0.8 units of screen BELOW the wall line, and
+          // what shows of each is about 1.75 units tall. A cone 0.47 as wide
+          // as it is high reads h * (cos E + 0.47 sin E) = 1.011 h up the
+          // screen, so that is a tree about two units tall — and for its top
+          // to fall 0.8 below the wall it has to stand (0.8 + h cos E) / sin
+          // E = 3 units out from it.
+          //
+          // Four conifers five units tall used to stand here, a unit past
+          // the wall, and they were the sharpest, largest things on screen.
+          // The reference's are tree tops in fog, which is the whole reason
+          // its land reads as far away rather than as a garden.
+          [-3.8, 11.2, 2.4],
+          [3.7, 11.0, 2.2],
           [-7.0, -8.5, 4.4],
           [7.1, -8.9, 4.1],
           // Beyond the ruins, where the camera reaches once the player walks
@@ -418,6 +433,30 @@ export class Scenery {
           [4.3, -13.4, 4.5],
           [-2.5, -15.8, 4.1],
           [2.7, -15.2, 3.8],
+          // The far end cannot be extended, and this is the line that says
+          // why. The camera's travel stops at lookZ = -4.44, so the top of a
+          // portrait screen is z = -4.44 - 9.978 / sin(48.5) = -17.8 — and
+          // on this side height climbs *away* from the view, because a far
+          // tree's canopy sits higher on screen than its trunk. A pine whose
+          // base is off the top is off the top entirely. Six were placed out
+          // to -28 and every one of them was invisible at any camera
+          // position; these two fill to the bound instead. The land itself
+          // runs 40 units past the gate (`WorldScene.addBeyond`) and always
+          // did — what was short was never the ground.
+          [-6.0, -16.9, 4.6],
+          [6.1, -17.4, 4.2],
+          // The near land is the end that could be tripled, and these are
+          // what stand in it. Here height climbs *towards* the arena, so a
+          // pine whose base is past the bottom of the screen (z = 17.8) still
+          // shows its top: for a four-unit tree that reaches back to z = 21.
+          // They stand in the deep end of the haze, so what each contributes
+          // is a shape in fog rather than a tree — the two at 11 are the ones
+          // meant to read as trees.
+          [-6.2, 13.4, 4.2],
+          [5.5, 14.1, 3.8],
+          [-2.4, 16.2, 4.6],
+          [2.9, 18.3, 4.0],
+          [-7.4, 18.9, 3.6],
         ],
         clusters: 0,
         minPer: 0,

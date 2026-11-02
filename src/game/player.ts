@@ -64,7 +64,11 @@ export interface Player {
 export function createPlayer(): Player {
   return {
     x: 0,
-    z: ROOM_DEPTH / 2 - 2,
+    // On the arena's near line, not two units up the field. The reference
+    // frame spawns its hero with the marker ring's bottom touching the coral
+    // border, and `clampToRoom` already stops a body exactly here — so this
+    // is the limit of the room rather than a number chosen next to it.
+    z: ROOM_DEPTH / 2 - PLAYER_RADIUS,
     // Looking up the arena, at the end the enemies come from. `facing` is
     // `atan2(dirX, dirZ)`, so 0 is +z — straight at the camera, which is
     // what the hero stood doing through the whole tutorial stage: it only
