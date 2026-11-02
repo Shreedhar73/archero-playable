@@ -44,7 +44,15 @@ jobs:
       # check -> headless simulation -> single-file build -> size gate.
       - run: npm run build
 
+      # `enablement` creates the Pages site when the repository does not have
+      # one, instead of failing the whole run. Without it a deploy dies on
+      # "Get Pages site failed ... verify that the repository has Pages
+      # enabled", which is what happened the first time Pages was switched off
+      # in the repository's settings: the workflow and the build were both
+      # fine and three earlier runs had published from this same file.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       # dist/generic holds exactly one index.html; package.mjs fails the build
       # if the bundle ever splits.
