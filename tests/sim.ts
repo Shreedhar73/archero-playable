@@ -35,6 +35,8 @@ import { createPlayer, movePlayer } from "../src/game/player.ts";
 import { createProjectiles, updateProjectiles } from "../src/game/projectiles.ts";
 import { createSpawner, updateSpawner } from "../src/game/spawner.ts";
 import { nearestVisibleEnemy } from "../src/game/targeting.ts";
+import { createCueWatcher, readCues } from "../src/audio/cues.ts";
+import { readFileSync } from "node:fs";
 import { addKills, createState } from "../src/game/state.ts";
 
 const failures: string[] = [];
@@ -86,6 +88,35 @@ function lineOfSight(): void {
   check(shot(0, 0, 0, -3), "line of sight: a crate past the target blocks the shot");
 }
 
+/**
+ * The audio module, checked for the thing that goes wrong silently.
+ *
+ * There are no files to weigh any more — every sound is built from two
+ * oscillator-and-filter primitives at runtime — so what is worth asserting is
+ * that the primitives still import outside a browser and that nothing in the
+ * sound table has crept back up to the level the last two versions were
+ * rejected for. A gain is the one property of a sound a machine here can
+ * judge; what it sounds like is the user's ears, and pretending otherwise
+ * would be worse than saying so.
+ */
+function audio(): void {
+  const source = readFileSync(new URL("../src/audio/audio.ts", import.meta.url), "utf8");
+  const table = source.slice(source.indexOf("const SFX:"), source.indexOf("export class GameAudio"));
+  const gains = [...table.matchAll(/gain:\s*(\d*\.?\d+)/g)].map((m) => Number(m[1]));
+
+  check(gains.length > 0, "audio: no gains found in the sound table — did it move?");
+  // The AR creative's routine envelope, which is the whole reason these
+  // numbers are these numbers. Its one louder sound is for a reveal; nothing
+  // in this ad earns that, so 0.25 is the ceiling here.
+  const loudest = Math.max(...gains);
+  check(
+    loudest <= 0.25,
+    `audio: a sound is at gain ${loudest}, over the 0.25 the reference creative ` +
+      `keeps for routine events — the last two versions were rejected for being loud`,
+  );
+  console.log(`  audio: ${gains.length} gains in the sound table, loudest ${loudest}, no files`);
+}
+
 function run(seed: number, moving: boolean, cover = false): void {
   const label = `seed ${seed} ${cover ? "in cover" : moving ? "moving" : "still"}`;
   const obstacles = createObstacles();
@@ -121,6 +152,19 @@ function run(seed: number, moving: boolean, cover = false): void {
   const streak = enemies.map(() => 0);
   let longestSlide = 0;
   let worstGap = Number.POSITIVE_INFINITY;
+  // Sound is driven by diffing state, not by events, so the cues are
+  // checkable here even though nothing in Node can play them.
+  const cueWatcher = createCueWatcher(enemies.length);
+  let shotCues = 0;
+  let enemyShotCues = 0;
+  let impactCues = 0;
+  let deathCues = 0;
+  let hurtCues = 0;
+  // Counted independently, by watching the pool fill rather than by
+  // asking the thing under test.
+  let arrowsFired = 0;
+  let hostileFired = 0;
+  const arrowWas = projectiles.map(() => false);
 
   for (let frame = 1; frame <= seconds * 60; frame++) {
     if (moving && !cover) {
@@ -137,9 +181,27 @@ function run(seed: number, moving: boolean, cover = false): void {
     separateEnemies(enemies, obstacles, dt);
     updateEnemyAttacks(enemies, player, projectiles, obstacles, dt);
     updateShooting(player, enemies, projectiles, obstacles, dt);
+    // Between firing and resolving on purpose: an arrow loosed at point blank
+    // is spent inside updateProjectiles in the same frame, so a pool scanned
+    // afterwards never sees it and the witness undercounts by one.
+    for (let i = 0; i < projectiles.length; i++) {
+      const arrow = projectiles[i];
+      if (arrow.alive && !arrowWas[i]) {
+        if (arrow.hostile) hostileFired++;
+        else arrowsFired++;
+      }
+      arrowWas[i] = arrow.alive;
+    }
     addKills(state, updateProjectiles(projectiles, enemies, player, obstacles, dt));
 
     if (state.stage === "end" && finishedAt === 0) finishedAt = frame / 60;
+
+    const cues = readCues(cueWatcher, player, enemies, state);
+    if (cues.shot) shotCues++;
+    enemyShotCues += cues.enemyShots;
+    impactCues += cues.impacts;
+    deathCues += cues.deaths;
+    if (cues.hurt) hurtCues++;
 
     // Frames where someone was in range but none of them could be shot at.
     // Reported rather than asserted: it is the feature working, and a run
@@ -262,6 +324,10 @@ function run(seed: number, moving: boolean, cover = false): void {
       `${coveredFrames} frames with every target behind cover`,
   );
   console.log(
+    `    cues: ${shotCues} shots, ${enemyShotCues} enemy shots, ` +
+      `${impactCues} impacts, ${deathCues} deaths, ${hurtCues} hits taken`,
+  );
+  console.log(
     `    sliding: ${slideFrames} of ${movedFrames} walking frames ` +
       `(${((slideFrames / Math.max(movedFrames, 1)) * 100).toFixed(1)}%), ` +
       `longest run ${longestSlide} frames, ` +
@@ -275,9 +341,56 @@ function run(seed: number, moving: boolean, cover = false): void {
     slideFrames < movedFrames * 0.02,
     `${label}: enemies slid for ${slideFrames} of ${movedFrames} walking frames`,
   );
+
+  // One bow sound per arrow the player actually loosed. The pool count is the
+  // independent witness: if `player.shooting` ever stopped rising on a shot,
+  // the archer's draw animation would break in the same silent way.
+  check(
+    shotCues === arrowsFired,
+    `${label}: ${shotCues} shot cues for ${arrowsFired} arrows fired`,
+  );
+  // Exactly one death sound per kill. `damageEnemy` reports a kill once, and
+  // the dying edge has to agree with it or a corpse is paying out twice.
+  check(
+    deathCues === state.kills,
+    `${label}: ${deathCues} death cues for ${state.kills} kills`,
+  );
+  check(shotCues > 0, `${label}: no shot cues at all`);
+  // The enemy side has no `shooting` timer to rise, so its cue is read off a
+  // cooldown climbing back up. Held against the pool, because the same climb
+  // happens when an archer loses range and the counter is refilled.
+  check(
+    enemyShotCues === hostileFired,
+    `${label}: ${enemyShotCues} enemy shot cues for ${hostileFired} enemy arrows`,
+  );
+  // An arrow can miss: into a crate, or out of life. It cannot land twice.
+  check(
+    impactCues <= arrowsFired,
+    `${label}: ${impactCues} impacts for ${arrowsFired} arrows`,
+  );
+
+  // A watcher created mid-run must open silent. Unlocking audio on a late tap
+  // would otherwise fire every edge the run has accumulated at once.
+  const fresh = readCues(
+    createCueWatcher(enemies.length),
+    player,
+    enemies,
+    state,
+  );
+  check(
+    !fresh.shot &&
+      fresh.enemyShots === 0 &&
+      fresh.impacts === 0 &&
+      fresh.deaths === 0 &&
+      !fresh.hurt &&
+      !fresh.win &&
+      !fresh.lose,
+    `${label}: a fresh cue watcher fired on its first read`,
+  );
 }
 
 console.log("simulating...");
+audio();
 lineOfSight();
 run(1, false);
 run(1, true);

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>audition</title>
+  <style>
+    body { font: 15px/1.4 system-ui, sans-serif; margin: 0; padding: 24px; background: #15190f; color: #e8ecd8; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    p { margin: 0 0 16px; color: #aab39a; max-width: 52ch; }
+    section { margin-bottom: 20px; }
+    button { font: inherit; padding: 10px 16px; margin: 0 8px 8px 0; border: 1px solid #5a6b3a; border-radius: 8px; background: #26301a; color: inherit; cursor: pointer; }
+    button:active, button[aria-pressed="true"] { background: #4e6b2a; }
+    code { color: #d7e3b5; }
+    #log { font: 12px/1.5 ui-monospace, monospace; color: #8a9478; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Sound audition</h1>
+  <p>
+    Dev only: not in the build. The first tap unlocks the context exactly as
+    the game's first touch does. Every button goes through
+    <code>GameAudio</code>, so what plays here is what plays in the ad, cadence
+    gate included. Knobs: <code>MASTER</code> and each entry of
+    <code>SFX</code> in <code>src/audio/audio.ts</code>.
+  </p>
+
+  <section>
+    <button id="unlock">Unlock</button>
+    <button id="mute" aria-pressed="false">Mute</button>
+  </section>
+
+  <section id="sfx"></section>
+
+  <section>
+    <p>The game ships no background music: two synthesized beds were heard here
+      and rejected. This is the AR scanner creative's own tune, at its own
+      levels (0.11 under a 0.8 master), on a context of its own — it is not in
+      the game. Run it under the combat loop to judge whether any bed belongs.</p>
+    <button id="tune" aria-pressed="false">Reference tune (AR creative)</button>
+  </section>
+
+  <section>
+    <p>Twenty seconds of combat: a bow every 0.8 s, most arrows landing, a kill
+      every 2.5 s, a hit taken every 6 s. The density is what
+      the earlier versions were rejected for, not any one sound.</p>
+    <button id="combat" aria-pressed="false">Combat loop</button>
+  </section>
+
+  <div id="log"></div>
+
+  <script type="module">
+    import { GameAudio, SFX_NAMES } from "/src/audio/audio.ts";
+    import { midi, noise, tone } from "/src/audio/synth.ts";
+
+    const audio = new GameAudio(9);
+    const log = document.getElementById("log");
+    const say = (s) => { log.textContent = `${new Date().toLocaleTimeString()}  ${s}\n` + log.textContent; };
+
+    document.getElementById("unlock").addEventListener("pointerdown", () => {
+      audio.unlock();
+      say("unlock()");
+    });
+
+    const mute = document.getElementById("mute");
+    let muted = false;
+    mute.addEventListener("click", () => {
+      muted = !muted;
+      mute.setAttribute("aria-pressed", String(muted));
+      audio.setMuted(muted);
+      if (!muted) audio.tap();
+      say(`setMuted(${muted})`);
+    });
+
+    const sfx = document.getElementById("sfx");
+    for (const name of SFX_NAMES) {
+      const b = document.createElement("button");
+      b.textContent = name;
+      // pointerdown, not click: the first one doubles as the unlock gesture.
+      b.addEventListener("pointerdown", () => {
+        audio.unlock();
+        audio.preview(name);
+        say(name);
+      });
+      sfx.appendChild(b);
+    }
+
+    // The AR creative's four-bar loop, note for note, on its own context so
+    // the game's bus is untouched. Audition only.
+    const tuneButton = document.getElementById("tune");
+    let tuneCtx = null;
+    let tuneTimer = null;
+    tuneButton.addEventListener("pointerdown", () => {
+      if (tuneTimer !== null) {
+        clearInterval(tuneTimer); tuneTimer = null;
+        void tuneCtx.suspend();
+        tuneButton.setAttribute("aria-pressed", "false");
+        say("reference tune off");
+        return;
+      }
+      if (tuneCtx === null) {
+        tuneCtx = new AudioContext();
+        const master = tuneCtx.createGain(); master.gain.value = 0.8;
+        master.connect(tuneCtx.createDynamicsCompressor()).connect(tuneCtx.destination);
+        const music = tuneCtx.createGain(); music.gain.value = 0.11; music.connect(master);
+        tuneCtx.__voice = { ctx: tuneCtx, out: music };
+      }
+      void tuneCtx.resume();
+      const v = tuneCtx.__voice;
+      const step = 60 / 112 / 2;
+      const lead = [76, 0, 79, 0, 81, 79, 76, 0, 74, 0, 76, 0, 72, 0, 0, 0, 76, 0, 79, 0, 84, 81, 79, 0, 81, 79, 76, 74, 72, 0, 0, 0];
+      const bass = [48, 0, 0, 0, 55, 0, 0, 0, 45, 0, 0, 0, 52, 0, 0, 0, 41, 0, 0, 0, 48, 0, 0, 0, 43, 0, 0, 0, 47, 0, 43, 0];
+      let index = 0;
+      let next = v.ctx.currentTime + 0.1;
+      const schedule = () => {
+        while (next < v.ctx.currentTime + 0.2) {
+          const at = next - v.ctx.currentTime;
+          const l = lead[index % lead.length];
+          const b = bass[index % bass.length];
+          if (l) tone(v, midi(l), { at, duration: step * 0.9, gain: 0.35, type: "square", attack: 0.005 });
+          if (b) tone(v, midi(b), { at, duration: step * 3.5, gain: 0.7, type: "triangle" });
+          if (index % 2 === 1) noise(v, { at, duration: 0.03, filter: "highpass", frequency: 7000, gain: 0.25 });
+          index++;
+          next += step;
+        }
+      };
+      tuneTimer = setInterval(schedule, 50);
+      schedule();
+      tuneButton.setAttribute("aria-pressed", "true");
+      say("reference tune on");
+    });
+
+    const combat = document.getElementById("combat");
+    let timers = [];
+    combat.addEventListener("pointerdown", () => {
+      audio.unlock();
+      if (timers.length) {
+        timers.forEach(clearInterval);
+        timers = [];
+        combat.setAttribute("aria-pressed", "false");
+        say("combat stopped");
+        return;
+      }
+      combat.setAttribute("aria-pressed", "true");
+      say("combat: 20 s");
+      timers.push(setInterval(() => {
+        audio.preview("shot");
+        if (Math.random() < 0.8) setTimeout(() => audio.preview("impact"), 250 + Math.random() * 150);
+      }, 800));
+      timers.push(setInterval(() => audio.preview("death"), 2500));
+      timers.push(setInterval(() => audio.preview("hurt"), 6000));
+      timers.push(setTimeout(() => {
+        timers.forEach(clearInterval);
+        timers = [];
+        combat.setAttribute("aria-pressed", "false");
+        audio.preview("win");
+        say("combat done, win");
+      }, 20000));
+    });
+  </script>
+</body>
+</html>

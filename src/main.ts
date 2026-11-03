@@ -26,6 +26,8 @@ import { EndCard } from "./ui/endCard.ts";
 import { TutorialHand } from "./ui/tutorialHand.ts";
 import { FOG_DEPTH, Mist } from "./ui/mist.ts";
 import { DamageNumbers } from "./ui/damageNumbers.ts";
+import { MuteButton } from "./ui/muteButton.ts";
+import { GameAudio } from "./audio/audio.ts";
 import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
 import { loadArcher, loadArrow, loadEnemy, loadHero, loadScenery } from "./three/assets.ts";
@@ -125,6 +127,15 @@ async function boot(): Promise<void> {
   // white flash is drawn from. Built once; nothing here allocates per frame.
   const lastEnemyFlash = enemies.map(() => 0);
   let lastPlayerFlash = 0;
+  // Silent until the first tap unlocks it, which is also when the tutorial
+  // ends. Nothing here can touch game state — audio reads it, like a view.
+  const audio = new GameAudio(enemies.length);
+  const mute = new MuteButton((muted) => {
+    audio.setMuted(muted);
+    // Only on the way back: a click played into a mute that is already
+    // ramping to zero is a click nobody hears.
+    if (!muted) audio.tap();
+  });
 
   // First child, so the haze sits over the 3D world and under every widget.
   app.stage.addChild(mist);
@@ -136,6 +147,8 @@ async function boot(): Promise<void> {
   app.stage.addChild(hand);
   // Last, so it covers the joystick: the run is over, the stick is not live.
   app.stage.addChild(endCard);
+  // Above even the card: muting an ad has to stay possible at any moment.
+  app.stage.addChild(mute);
   app.stage.eventMode = "static";
   app.stage.hitArea = app.screen;
   joystick.listenOn(app.stage);
@@ -147,14 +160,30 @@ async function boot(): Promise<void> {
   let tutorialElapsed = 0;
   const noteInput = (): void => {
     touched = true;
+    // Inside the gesture, synchronously. Autoplay policy judges the call
+    // stack, not the clock, so resuming from the loop tick that reads
+    // `touched` leaves the context suspended for the whole ad.
+    audio.unlock();
   };
   app.stage.on("pointerdown", noteInput);
-  window.addEventListener("keydown", noteInput, { once: true });
+  // Not `once`: a modifier key alone (Shift, measured) ends the tutorial but
+  // grants no user activation, so the context it creates stays suspended.
+  // The next real key must get another go, and `unlock` is a no-op once the
+  // context runs.
+  window.addEventListener("keydown", noteInput);
 
   // The camera now moves, so the haze has to be re-anchored every frame
   // rather than on resize — these are the last viewport the layout saw.
   let screenW = 1;
   let screenH = 1;
+  // A backgrounded tab keeps its context running and plays into nothing;
+  // iOS parks it in "interrupted" after a call and needs waking.
+  document.addEventListener("visibilitychange", () => {
+    audio.setViewable(document.visibilityState === "visible");
+  });
+  // Declared in adapters/types.ts since the skeleton and wired to nothing
+  // until now: only the network knows when its own ad is off-screen.
+  adapter.onViewableChange?.((viewable) => audio.setViewable(viewable));
 
   onResize((w, h) => {
     screenW = w;
@@ -176,6 +205,7 @@ async function boot(): Promise<void> {
     bars.layout(w, h);
     endCard.layout(w, h);
     hand.layout(w, h, joystick.x, joystick.y);
+    mute.layout(w, h, scale);
     // TODO: re-position UI elements
   });
 
@@ -232,6 +262,9 @@ async function boot(): Promise<void> {
       nearDeep,
       world.project(0, 0, -ROOM_DEPTH / 2 - 4.6).y,
     );
+    // Before the views, so a death sting and the clip it belongs to start
+    // on the same frame. Reads state, writes nothing.
+    audio.sync(player, enemies, state);
     hud.update(state.points, progress(state));
     world.syncPlayer(player);
     for (let i = 0; i < enemies.length; i++) {

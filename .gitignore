@@ -20,3 +20,8 @@ assets/raw/erika-textures/
 # which do stay committed.
 assets/raw/archero-base.glb
 assets/raw/archero-final-raw.glb
+
+# The CC0 recordings the second audio pass used. Nothing in the build reads
+# them any more — sound is synthesized (src/audio/synth.ts) — but they are
+# what a sampled version would start from again.
+assets/raw/audio/

@@ -32,6 +32,11 @@ so the CTA logs a warning instead of clicking out.
 
 - **All**: zero runtime requests — fonts, images, audio inlined. Caps read as
   decimal MB. Passing the gate ≠ validated: upload to each network's validator.
+- **Sound**: nothing plays before the first tap (`AudioContext` is created and
+  resumed inside that gesture, in `src/audio/audio.ts`), and the mute control
+  is on screen from the first frame. There is no audio file to inline: every
+  sound is synthesized at runtime from two primitives in `src/audio/synth.ts`.
+  Mute is not persisted — see the Google rule below.
 - **Meta**: no `window.open`/`location` anywhere in the bundle (scanner
   rejects); CTA only through `FbPlayableAd.onCTAClick()`.
 - **Google**: `exitapi.js` is the one allowed external script (injected by the
@@ -50,6 +55,7 @@ src/
   adapters/        one file per ad network (types.ts is the contract)
   engine/          loop.ts (ticker + dt clamp), resize.ts (layout bus)
   three/           world.ts — Three.js boot (only in Three-enabled projects)
+  audio/           cues.ts (state diff), synth.ts (primitives), audio.ts (output)
 scripts/
   package.mjs      per-network packaging and size gate
 ```
@@ -92,6 +98,21 @@ npm run archero:view  # contact sheet of the hero's clips, any camera angle
 npm run assets        # rebuild the other assets/*.glb from assets/raw/
 npm run assets:check  # print clips, bounds and bone names of the built files
 ```
+
+**There are no audio assets.** Sound is synthesized at runtime — two
+primitives in `src/audio/synth.ts` (a tone with an optional pitch slide, a
+filtered noise burst), and a table of sounds built from them in
+`src/audio/audio.ts`. No background music: two synthesized beds were heard
+and rejected, and the effects alone are the sound. Zero bundle bytes, no
+licence question, and the primitives and the master level come from our AR
+scanner creative rather than being invented here. The knobs: `MASTER`, and
+the `gain` in each entry of `SFX`. `npm run audition` opens a dev-only page
+that plays each sound, a combat-density loop and the AR creative's tune for
+reference; it is not part of any build.
+
+An earlier version decoded seven CC0 MP3s instead and cost 220 KB. Those
+recordings are still on disk at `assets/raw/audio/` (gitignored) if a sampled
+version is ever wanted again; nothing in the build reads them.
 
 To rebuild the enemy archer, `assets/raw/` needs the rigged character export as
 `erika_archer.glb` plus four Mixamo downloads: `Standing Idle.fbx`,
