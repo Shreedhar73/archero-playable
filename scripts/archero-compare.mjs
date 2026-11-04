@@ -1,14 +1,7 @@
 /**
- * Erika, the hero as built, and the hero flipped — same clip frame, one
- * camera, framed on the bow hand.
- *
- * This is what settles `GRIP.mirror` in `archero-merge.mjs`. Matching the two
- * bows' principal axes leaves a half-turn about the limbs undecided, and this
- * prop's own geometry does not say which way round it goes: its centre knob
- * reads as a riser and points at the archer, so every rule derived from its
- * vertices chose the wrong side. Erika's bow is skinned into a model whose
- * clips look right, so her silhouette is the answer — limbs curving towards
- * the target, string by the hand.
+ * Side by side: the reference archer, the hero as built, the hero with its bow
+ * flipped. Same clip frame, one camera on the bow hand. This is how
+ * `GRIP.mirror` in archero-merge.mjs gets picked; axis matching cannot decide it.
  *
  *   node scripts/archero-compare.mjs [out.png] [yaw=90] [at=0.93]
  */
@@ -33,7 +26,7 @@ renderer.setSize(W * 3, H, false);
 renderer.setScissorTest(true);
 document.body.appendChild(renderer.domElement);
 const panels = [
-  ["erika", "/assets/archer_playable.glb", null],
+  ["erika", "/assets/raw/archer_playable.glb", null],
   ["hero as built", "/assets/archero_hero.glb", null],
   ["hero flipped", "/assets/archero_hero.glb", Math.PI],
 ];

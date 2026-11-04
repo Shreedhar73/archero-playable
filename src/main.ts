@@ -30,7 +30,7 @@ import { MuteButton } from "./ui/muteButton.ts";
 import { GameAudio } from "./audio/audio.ts";
 import { endRun } from "./game/state.ts";
 import { clamp } from "./engine/math.ts";
-import { loadArcher, loadArrow, loadEnemy, loadHero, loadScenery } from "./three/assets.ts";
+import { loadArrow, loadHero, loadRogue, loadScenery, loadWarrior } from "./three/assets.ts";
 import {
   createEnemies,
   separateEnemies,
@@ -49,41 +49,23 @@ import { updateEnemyAttacks, updateShooting } from "./game/combat.ts";
  *
  * CTA: call adapter.cta() from the end card; label is adapter.ctaLabel.
  */
-/**
- * How wide a floating bar is, as a fraction of its own body's height.
- *
- * 0.57 is not a taste: 44 px was tuned at 055610a against a body 1.836 units
- * tall, in the same 9-unit-wide framing this still uses, which is 42 px a
- * unit. The ratio is what was already on screen — only now it is expressed
- * against the body, so a scale edit resizes the bar instead of leaving a
- * full-size strip over a smaller model.
- *
- * Height drives it, not width: Erika's bounding box is 1.845 across because
- * her bow is in it, so width is not a usable proxy for how big a body reads.
- */
+/** Floating bar width as a fraction of its body's height, so a scale edit resizes the bar too. */
 const BAR_WIDTH_OF_HEIGHT = 0.57;
 
-/**
- * Clear of the head, in world units — one number for every body, so bars over
- * heads of different heights sit the same distance above them. A world-space
- * Y offset moves cos(48.5) = 0.66 of itself up the screen, so this is about
- * seven pixels of gap.
- */
+/** World units above the head. */
 const BAR_GAP = 0.25;
 
 
-/** Where a damage number starts, as a fraction of the body's height. Below
- *  the bar, so the two do not overlap on the way up — as a fixed 2.1 it was
- *  *above* the hero's 1.56 head and crossed the bar it was meant to clear. */
+/** Where a damage number starts, as a fraction of body height. Below the bar. */
 const HIT_NUMBER_OF_HEIGHT = 0.75;
 
 async function boot(): Promise<void> {
   // The network decides when the ad may start (MRAID ready etc.).
   await adapter.ready();
-  const [hero, archer, enemy, arrow, scenery] = await Promise.all([
+  const [hero, rogue, warrior, arrow, scenery] = await Promise.all([
     loadHero(),
-    loadArcher(),
-    loadEnemy(),
+    loadRogue(),
+    loadWarrior(),
     loadArrow(),
     loadScenery(),
   ]);
@@ -95,12 +77,11 @@ async function boot(): Promise<void> {
 
   const player = createPlayer();
   const obstacles = createObstacles();
-  // Planned with the enemy's radius baked in, so the field never routes
-  // anything through a gap it cannot fit through.
+  // Inflated by the enemy radius so the field never routes through a gap a body cannot fit.
   const grid = createGrid(obstacles, ENEMY_RADIUS);
 
   const world = new WorldScene(
-    { hero, archer, enemy, arrow, scenery: { tree, rock, mushroom, pine } },
+    { hero, rogue, warrior, arrow, scenery: { tree, rock, mushroom, pine } },
     obstacles,
   );
 
@@ -116,94 +97,68 @@ async function boot(): Promise<void> {
   const bars = new HealthBars(enemies.length + 1);
   const endCard = new EndCard();
   const hand = new TutorialHand();
-  // Three values and no more: every arrow the player fires does ARROW_DAMAGE,
-  // and the player is only ever hit by a swing or an enemy arrow. Four labels
-  // each is more than can be in the air at once at these hit rates.
+  // The only three damage values in the game.
   const numbers = new DamageNumbers(
     [ARROW_DAMAGE, ENEMY_DAMAGE, ENEMY_ARROW_DAMAGE],
     4,
   );
-  // A hit is the frame a flash timer goes up, which is the same edge the
-  // white flash is drawn from. Built once; nothing here allocates per frame.
+  // A hit is the frame a flash timer rises.
   const lastEnemyFlash = enemies.map(() => 0);
   let lastPlayerFlash = 0;
-  // Nothing here can touch game state — audio reads it, like a view.
-  // Started now, not on the first tap: a game that opens with the tune and
-  // whose first arrow is heard is what the real one does. Browsers that
-  // enforce autoplay policy keep the context suspended until a gesture, and
-  // then the first tap below resumes it — the ad never depends on which.
+  // Unlocked at boot where autoplay policy allows; the first input resumes it otherwise.
   const audio = new GameAudio(enemies.length);
   audio.unlock();
   const mute = new MuteButton((muted) => {
     audio.setMuted(muted);
-    // Only on the way back: a click played into a mute that is already
-    // ramping to zero is a click nobody hears.
+    // Only on unmute; a click into a closing mute is never heard.
     if (!muted) audio.tap();
   });
 
-  // First child, so the haze sits over the 3D world and under every widget.
+  // Haze over the world, under every widget.
   app.stage.addChild(mist);
   app.stage.addChild(hud);
   app.stage.addChild(bars);
-  // Over the bars, under the stick: a number is the thing being read.
   app.stage.addChild(numbers);
   app.stage.addChild(joystick);
   app.stage.addChild(hand);
-  // Last, so it covers the joystick: the run is over, the stick is not live.
+  // Covers the joystick once the run is over.
   app.stage.addChild(endCard);
-  // Above even the card: muting an ad has to stay possible at any moment.
+  // Muting must stay possible over the card.
   app.stage.addChild(mute);
   app.stage.eventMode = "static";
   app.stage.hitArea = app.screen;
   joystick.listenOn(app.stage);
 
-  // The tutorial ends on the first input of any kind, so the listeners are
-  // registered once and never removed — a flag is cheaper than teardown, and
-  // nothing else reads it after the first frame of gameplay.
   let touched = false;
   let tutorialElapsed = 0;
   const noteInput = (): void => {
     touched = true;
-    // Inside the gesture, synchronously. Autoplay policy judges the call
-    // stack, not the clock, so resuming from the loop tick that reads
-    // `touched` leaves the context suspended for the whole ad.
+    // Synchronously inside the gesture; autoplay policy checks the call stack.
     audio.unlock();
   };
   app.stage.on("pointerdown", noteInput);
-  // Not `once`: a modifier key alone (Shift, measured) ends the tutorial but
-  // grants no user activation, so the context it creates stays suspended.
-  // The next real key must get another go, and `unlock` is a no-op once the
-  // context runs.
+  // Not `once`: a lone modifier key grants no user activation, so the next
+  // key must get another go.
   window.addEventListener("keydown", noteInput);
 
-  // The camera now moves, so the haze has to be re-anchored every frame
-  // rather than on resize — these are the last viewport the layout saw.
+  // The haze is re-anchored every frame against the last viewport seen.
   let screenW = 1;
   let screenH = 1;
-  // A backgrounded tab keeps its context running and plays into nothing;
-  // iOS parks it in "interrupted" after a call and needs waking.
   document.addEventListener("visibilitychange", () => {
     audio.setViewable(document.visibilityState === "visible");
   });
-  // Declared in adapters/types.ts since the skeleton and wired to nothing
-  // until now: only the network knows when its own ad is off-screen.
+  // Only the network knows when its ad is off-screen.
   adapter.onViewableChange?.((viewable) => audio.setViewable(viewable));
 
   onResize((w, h) => {
     screenW = w;
     screenH = h;
     world.resize(w, h);
-    // Thumb-sized on a phone, not absurd on a desktop. Based on the shorter
-    // side, so rotating changes where the joystick is, never how big.
-    // Ring is 70 units wide, and reference.jpg puts it at ~19% of screen
-    // width. Driven by the shorter side so rotating moves it, never resizes it.
+    // Driven by the shorter side, so rotating moves the joystick but never resizes it.
     const scale = clamp(Math.min(w, h) / 420, 0.85, 1.5);
     joystick.scale.set(scale);
-    // Portrait: thumb-centre, below the room. Landscape: bottom-left, because
-    // a centred stick there lands in the middle of the arena, on the archer.
-    // A fraction, not a pixel offset: this holds its place across aspect
-    // ratios, and puts the stick over the play area rather than below it.
-    // Only where it *rests* — the base moves to the thumb on every touch.
+    // Rest position only; the base moves to the thumb on touch. Landscape
+    // goes bottom-left, since a centred stick would sit on the arena.
     joystick.place(w > h ? w * 0.18 : w / 2, w > h ? h * 0.72 : h * 0.84, w, h);
     hud.layout(w, h, scale);
     bars.layout(w, h);
@@ -224,8 +179,7 @@ async function boot(): Promise<void> {
     } else if (state.stage === "gameplay") {
       const dir = joystick.dragging ? joystick.direction : keyboardDirection();
       movePlayer(player, dir.x, dir.z, dt, obstacles);
-      // One solve serves every enemy, and it early-outs unless the player
-      // changed cell.
+      // One solve for every enemy; early-outs unless the player changed cell.
       solveFlow(grid, player.x, player.z);
       updateSpawner(spawner, enemies, dt);
       updateEnemies(enemies, player.x, player.z, dt, obstacles, grid);
@@ -238,26 +192,13 @@ async function boot(): Promise<void> {
       endCard.show(state.points, state.cleared);
     }
 
-    // Views keep syncing and mixers keep advancing after the run ends, so the
-    // room idles behind the card instead of freezing mid-stride.
-    //
-    // The camera is aimed first: the bars and the haze are placed from its
-    // projection, and aiming after them would place this frame's overlay
-    // against last frame's view.
+    // Views keep syncing after the run ends so the room idles behind the card.
+    // The camera is aimed first: bars and haze are placed from its projection.
     world.follows(player.z, dt);
-    // The near wall in screen pixels: where the land in front of the arena
-    // starts, and so where the haze starts. Per frame now, because the camera
-    // travels — on resize only, the band would stay where the wall was at
-    // boot. project() returns a shared object, so it is read before anything
-    // else can call it.
-    // Both walls, read one at a time: project() hands back one shared
-    // object, so the near edge is taken before the far one overwrites it.
+    // project() returns one shared object, so each result is read before the next call.
     const nearEdge = world.project(0, 0, ROOM_DEPTH / 2).y;
-    // ...and FOG_DEPTH of ground beyond it, which is where the haze finishes.
-    // Two world points rather than one screen band: the band a viewport
-    // leaves below the wall is not the same length at every aspect ratio, and
-    // a haze stretched to fit it reaches full white on top of the player on a
-    // short one.
+    // Two world points, not a screen band: a band stretched to fit a short
+    // viewport would reach full white over the player.
     const nearDeep = world.project(0, 0, ROOM_DEPTH / 2 + FOG_DEPTH).y;
     mist.layout(
       screenW,
@@ -266,8 +207,7 @@ async function boot(): Promise<void> {
       nearDeep,
       world.project(0, 0, -ROOM_DEPTH / 2 - 4.6).y,
     );
-    // Before the views, so a death sting and the clip it belongs to start
-    // on the same frame. Reads state, writes nothing.
+    // Before the views, so a death sting and its clip start on the same frame.
     audio.sync(player, enemies, state);
     hud.update(state.points, progress(state));
     world.syncPlayer(player);
@@ -278,9 +218,7 @@ async function boot(): Promise<void> {
     for (let i = 0; i < projectiles.length; i++) {
       world.syncArrow(i, projectiles[i]);
     }
-    // Floating bars live in Pixi but follow entities in the Three scene, so
-    // each position is projected through the camera. project() returns a
-    // shared object: read it before the next call.
+    // Bars live in Pixi and follow bodies in the Three scene via projection.
     const head = world.project(player.x, PLAYER_HEIGHT + BAR_GAP, player.z);
     bars.set(
       0,
@@ -306,9 +244,6 @@ async function boot(): Promise<void> {
     lastPlayerFlash = player.hitFlash;
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
-      // Per kind, because the two are nothing like the same height: the
-      // robot stands 0.86 units and the archer 1.07, and one number for both
-      // put one bar on a head and the other in the air above it.
       const height = ENEMY_HEIGHTS[enemy.kind];
       const over = world.project(enemy.x, height + BAR_GAP, enemy.z);
       const standing = enemy.alive && enemy.dying === 0;
@@ -323,8 +258,6 @@ async function boot(): Promise<void> {
         height * BAR_WIDTH_OF_HEIGHT * world.pixelsPerUnit(enemy.x, enemy.z),
       );
       if (enemy.hitFlash > lastEnemyFlash[i]) {
-        // project() hands back one shared object, so the bar's position is
-        // already consumed above before this overwrites it.
         const at = world.project(
           enemy.x,
           height * HIT_NUMBER_OF_HEIGHT,

@@ -1,11 +1,6 @@
 /**
- * Rebuilds assets/*.glb from the untouched models in assets/raw/.
- *
- * The player's own model is not here: it is merged from a character and four
- * Mixamo clips by scripts/fbx-merge.mjs and built by scripts/build-archer.mjs,
- * which runs the same passes out of scripts/glb-passes.mjs.
- *
- * Idempotent: reads raw/, writes over the siblings. Never edits raw/.
+ * Rebuilds the prop glbs in assets/ from assets/raw/. Characters have their own
+ * build scripts. Reads raw/, writes over the siblings, never edits raw/.
  *
  *   node scripts/optimize-assets.mjs
  */
@@ -38,37 +33,25 @@ import {
 } from "./glb-passes.mjs";
 
 const assets = fileURLToPath(new URL("../assets/", import.meta.url));
-// The meshopt encoder is wasm and loads asynchronously; the extension writes
-// through it, so the IO needs the ready instance as well as the transform.
+// Must be awaited or meshopt silently writes uncompressed data.
 await MeshoptEncoder.ready;
 const io = new NodeIO()
   .registerExtensions([EXTMeshoptCompression, KHRMeshQuantization, EXTTextureWebP])
   .registerDependencies({ "meshopt.encoder": MeshoptEncoder });
 
-/** Only these clips are reachable from a game state. */
+/** Clips to keep per file. All static props, so none. */
 const KEEP_CLIPS = {
-  "enemy.glb": ["Idle", "Running", "Punch", "Death"],
-  // The arrow: a static single mesh, no rig and no clips. It still goes
-  // through the pipeline for meshopt and texture compression.
   "arrow.glb": [],
-  // Scenery from the ripped mesh set. All three are static props with no
-  // rig, no clips and no textures — the rip carries none, so they are lit by
-  // materials assigned in `src/three/scenery.ts`. The tree is the exception
-  // that matters: its green lives in COLOR_0 and nowhere else, which is why
-  // the prune below keeps attributes for these three.
+  // Untextured; materials are assigned in src/three/scenery.ts.
   "tree.glb": [],
   "rock.glb": [],
   "mushroom.glb": [],
-  // The pine is not from the ripped set — it was downloaded because that
-  // set has no conifer in it, only a canopy blob, and the real game's trees
-  // are conifers. Two meshes, needles and trunk, and it is the one scenery
-  // prop that does carry textures.
+  // Separate source from the other props; the only textured one.
   "low_poly_pine.glb": [],
 };
 
-/** Files whose vertex attributes must survive prune. `keepAttributes: false`
- *  drops anything no material references, and a glTF material cannot say "I
- *  use vertex colours" — so COLOR_0 looks unused and the tree ships grey. */
+/** The tree's green is in COLOR_0, which `keepAttributes: false` would drop
+ *  because no material references it. */
 const KEEP_ATTRIBUTES = ["tree.glb"];
 
 async function optimize(name) {
@@ -83,23 +66,17 @@ async function optimize(name) {
   const normals = dropNormalMaps(doc);
 
   await doc.transform(
-    // prune first so later passes don't spend work on orphans.
     prune({
       keepAttributes: KEEP_ATTRIBUTES.includes(name),
       keepLeaves: false,
     }),
     dedup(),
-    // The dropped UV sets left vertices split for no reason.
     weld(),
-    // Mixamo and FBX2glTF bake a key per frame; most are interpolable.
     resample({ tolerance: 1e-4 }),
     sparse(),
     textureCompress({ encoder: sharp, targetFormat: "webp", resize: [512, 512] }),
-    // EXT_meshopt_compression quantizes as part of its own work, so it stands
-    // in for a separate quantize() pass. Measured on the archer: 582 KB to
-    // 279 KB against a 29 KB decoder the bundle inlines once, for every model
-    // at once. Draco was measured too and rejected — 250 KB of wasm and
-    // wrapper costs more than the geometry it saves.
+    // meshopt quantizes on its own, so no separate quantize() pass. Its 29 KB
+    // decoder is inlined once; Draco's wasm costs more than it saves here.
     meshopt({ encoder: MeshoptEncoder, level: "high" }),
   );
 

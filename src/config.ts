@@ -61,8 +61,12 @@ export const ENEMY_KINDS = [
  */
 export const ENEMY_COUNT = ENEMY_KINDS.length;
 
-/** Ememy height of glb is 4.791 untits, archer is 1.832, so we need to scale down enemy */
-export const ENEMY_SCALE = 0.28;
+/**
+ * How big the melee skeleton is drawn. Visual only. KayKit's Warrior stands
+ * 2.591 in its file, horns included; at 0.6 that is 1.55 on the floor, a
+ * head under the hero, which is the relation the real game's melee keep.
+ */
+export const ENEMY_SCALE = 0.6;
 
 /**
  * How big the player's model is drawn. Visual only — `PLAYER_RADIUS` is what
@@ -181,22 +185,17 @@ export const ENEMY_KITE_BAND = 0.78;
 export const ENEMY_BACKPEDAL = 0.8;
 
 /**
- * Enemy archers reuse the player's GLB: it already carries a bow, a Shoot
- * clip and a Death clip, so they cost no extra bundle bytes at all.
- *
- * Sharing a model means sharing a silhouette, so the tint is doing all the
- * work of telling friend from foe. A gentle 0.55 mix was not enough — at this
- * camera distance both read as "dark figure with a bow" — hence a strong mix
- * toward a saturated red. Scale helps a little, colour does the rest.
+ * How big the ranged skeleton is drawn. KayKit's Rogue stands 2.308 in its
+ * file; at 0.72 it is the 1.66 Erika stood at, so nothing placed against
+ * the old height moved. No tint any more: the two kinds are different
+ * bodies with different weapons, which is what the tint was standing in for.
  */
-export const ENEMY_ARCHER_SCALE = 0.9;
-export const ENEMY_ARCHER_TINT = 0xff3b2e;
-
-export const ENEMY_ARCHER_TINT_MIX = 0.82;
+export const ENEMY_ARCHER_SCALE = 0.72;
 
 /**
  * Rest-pose height of each model as it ships, straight off
- * `scripts/check-assets.mjs`: the hero 1.830, Erika 1.836, the robot 4.791.
+ * `scripts/check-assets.mjs`: the hero 1.830, the Rogue 2.308, the Warrior
+ * 2.591 (KayKit's skeletons, horns and T-pose arms included).
  * Times the scale it is drawn at, that is where its head is — and a floating
  * bar is placed *and* sized from it, so changing a scale carries the bar with
  * the body instead of leaving it behind at the height the old scale had.
@@ -207,6 +206,6 @@ export const ENEMY_ARCHER_TINT_MIX = 0.82;
  */
 export const PLAYER_HEIGHT = 1.83 * PLAYER_SCALE;
 export const ENEMY_HEIGHTS: Record<(typeof ENEMY_KINDS)[number], number> = {
-  melee: 4.791 * ENEMY_SCALE,
-  archer: 1.836 * ENEMY_ARCHER_SCALE,
+  melee: 2.591 * ENEMY_SCALE,
+  archer: 2.308 * ENEMY_ARCHER_SCALE,
 };

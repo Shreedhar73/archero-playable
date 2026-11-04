@@ -1,28 +1,17 @@
 /**
  * assets/raw/archero-model.glb + four Mixamo clips + a bow -> one raw glb.
  *
- * Same job as `fbx-merge.mjs` does for Erika, against a source that arrives
- * differently and so needs three things that merge did not:
+ * Same job as fbx-merge.mjs, with three extra steps the Sketchfab source needs:
+ *  - Joints are named `mixamorig:Hips_01`; Mixamo clips address `mixamorigHips`.
+ *    The suffixes are stripped or the exporter silently drops every track.
+ *  - The material is `KHR_materials_pbrSpecularGlossiness`, which three does
+ *    not read (renders white). Converted to metallic-roughness here.
+ *  - The rig has different proportions from the clips' rig, so only rotations
+ *    and a rescaled hips translation are kept. Other translation and scale
+ *    tracks would impose the source rig's bone lengths.
  *
- *  - The model is a Sketchfab export, so every joint is named
- *    `mixamorig:Hips_01` rather than `mixamorig:Hips`. Mixamo's own clips
- *    address `mixamorigHips`, so the suffixes are stripped here; without that
- *    every track targets a node that does not exist and the exporter drops it
- *    silently.
- *  - Its one material is `KHR_materials_pbrSpecularGlossiness`, which three
- *    removed. `GLTFLoader` says "Unknown extension" and renders the character
- *    white, so the conversion to metallic-roughness happens in Node, before
- *    the browser ever sees the file.
- *  - The rig is this character's proportions, not Erika's: a chibi hips sits
- *    at 55.8 where Mixamo's clips were recorded against ~100. Rotations
- *    retarget by name, but a translation key does not — so only the hips
- *    translation survives, scaled by the ratio of the two rest heights, and
- *    every other translation and scale track is dropped. Keeping them would
- *    impose the source rig's bone lengths on this one.
- *
- * The bow is a separate prop here (the model ships unarmed) and is parented to
- * the left hand bone at merge time rather than at runtime, so anything that
- * clones the glb gets the bow for free.
+ * The bow is parented to the left hand bone at merge time, so a clone of the
+ * glb carries it.
  *
  *   node scripts/archero-merge.mjs
  */
@@ -37,13 +26,13 @@ import { chromium } from "playwright";
 const ROOT = resolve(import.meta.dirname, "..");
 
 const SRC = "assets/raw/archero-model.glb";
-/** The specular-glossiness conversion and the bone rename, nothing else. */
+/** Material converted and bones renamed, nothing else. */
 const BASE = "assets/raw/archero-base.glb";
 const BOW = "assets/raw/bow.glb";
 const OUT = "assets/raw/archero-final-raw.glb";
 
-// Same four clips the Erika merge uses, and for the same reason: these are the
-// only states the game has. FBXLoader names every Mixamo clip `mixamo.com`.
+// The only four states the game has. FBXLoader names every Mixamo clip
+// `mixamo.com`, so they are named here.
 const CLIPS = [
   ["Running", "assets/raw/Running (1).fbx"],
   ["Standing Idle", "assets/raw/Standing Idle.fbx"],
@@ -52,56 +41,23 @@ const CLIPS = [
 ];
 
 /**
- * Where the bow sits in the left hand — copied off Erika rather than tuned.
+ * Where the bow sits in the left hand, measured off the reference archer.
  *
- * Three hand-picked constants lived here and all three were wrong in a way
- * that only showed up in motion. What finally settled it: the clips overwrite
- * every bone's *local* rotation, and a rotation chain does not care about
- * bone lengths, so at any frame of any clip this rig's left hand carries
- * exactly the world orientation Erika's does. Whatever constant she holds her
- * bow at is therefore the constant this prop wants, and hers is right because
- * her bow is skinned into a model the clips were authored around.
+ * Clips overwrite every bone's local rotation, so at any clip frame both rigs'
+ * left hands share one world orientation. The principal axes of her skinned
+ * bow at `shootAt` (full draw) give limb axis and plane normal; the prop's own
+ * axes give the mapping onto them. Note the bow's plane contains the arrow's
+ * path: the normal points sideways, not forwards.
  *
- * So the merge measures her: principal axes of her bow's skinned vertices at
- * the Shoot pose give its limb axis and the normal of its plane, and the
- * same axes of this prop give the mapping between them. The lesson paid for
- * twice is that **a bow's plane contains the arrow's path** — the normal
- * points sideways, out of the archer's line of fire, not forwards. Aiming
- * the prop's flat face down the shot direction lays the bow over on its side,
- * which is what it was doing.
- *
- * A turn about the limbs was tried here, to catch the bow's face at a camera
- * it is edge-on to, and a longer bow with it. Both were rejected on sight:
- * legible in a contact sheet, wrong in the game. The bow stays where the
- * measurement puts it.
- *
- * `mirror` is the one thing the measurement cannot settle. An axis has no
- * direction, so limb-to-limb and aim-to-aim still leaves a half-turn about
- * the limbs — string where the riser should be — and deciding it needs to
- * know which side of this prop the string is on. Erika's bow says that with
- * its geometry (a thin straight run between the tips, the limbs bulging the
- * other way); this one, stylised and 166 vertices, does not: the knob at its
- * centre reads as a riser and points the other way, and every rule written
- * off its vertices picked the wrong side. So the half-turn is a flag, set by
- * putting the two bows side by side at the same frame of the same clip and
- * looking — `scripts/archero-compare.mjs` renders exactly that pair.
- *
- * `shootAt` is where in the Shoot clip to measure. Full draw: hand extended,
- * everything about the pose unambiguous. That the copy is exact is checkable
- * rather than argued: posed at that frame, the two rigs' left hands agree on
- * their world orientation to 0.08 degrees.
- *
- * Only the *length* refuses to come across. Erika's bow is 4.8 of her hand
- * bones, and carrying that ratio over gives a bow a third of this character's
- * height, because a chibi's arms are short for his size — the thing the two
- * rigs disagree about is exactly the thing bone lengths measure. So the bow
- * is sized against the body instead: `lengthOfHeight` is what fraction of the
- * character it spans, picked off a contact sheet of candidates, where hers
- * would be 0.76 and that reads as oversized on a body this shape.
+ * Two values the measurement cannot give. `mirror`: axes have no direction, so
+ * a half-turn about the limbs is left open, and this prop's geometry does not
+ * say which side the string is on. Set by eye with archero-compare.mjs.
+ * `lengthOfHeight`: the chibi's arms are short for its body, so a length in
+ * hand bones comes out wrong; the bow is sized as a fraction of body height.
  */
 const GRIP = {
   bone: "mixamorigLeftHand",
-  reference: "assets/archer_playable.glb",
+  reference: "assets/raw/archer_playable.glb",
   referenceMaterial: /^bow/i,
   shootAt: 0.9,
   lengthOfHeight: 0.7,
@@ -112,11 +68,7 @@ const MIME = { ".html": "text/html", ".js": "text/javascript", ".fbx": "applicat
 
 const url = (p) => "/" + p.split("/").map(encodeURIComponent).join("/");
 
-/**
- * Sketchfab suffixes every node with its own index — `mixamorig:Hips_01`,
- * `mixamorig:RightUpLeg_00` — and `GLTFLoader` only strips the colon. Mixamo's
- * clips address the sanitized Mixamo name, so both have to go.
- */
+/** `mixamorig:Hips_01` -> `mixamorigHips`. GLTFLoader only strips the colon. */
 const mixamoName = (name) => {
   const m = /^mixamorig:(.+?)(_\d+)?$/.exec(name);
   return m ? "mixamorig" + m[1] : name;
@@ -138,8 +90,7 @@ async function prepareBase() {
     renamed++;
   }
 
-  // The source carries one baked Mixamo clip of its own; the four this game
-  // needs are merged in below, and an unnamed fifth would only confuse them.
+  // The source carries one baked clip of its own; the game's four are merged below.
   const dropped = doc.getRoot().listAnimations().map((a) => (a.dispose(), a.getName()));
 
   await io.write(join(ROOT, BASE), doc);
@@ -288,13 +239,10 @@ function bowAxes(points) {
   }
   const length = hi - lo;
 
-  // Power iteration hands back an axis, not a direction — its sign is
-  // arbitrary — and a flipped in-plane axis is a bow turned 180 degrees about
-  // its own limbs: string where the riser should be, shooting backwards. So
-  // the direction is decided by the shape. Near the middle of the limbs the
-  // riser stands proud of the string, and it stands proud on the side the
-  // arrow leaves towards, so the grip's own offset from the centre is the
-  // aim.
+  // Power iteration gives an axis with arbitrary sign, and a flipped in-plane
+  // axis is a bow shooting backwards. Resolve it from the shape: near the middle
+  // of the limbs the riser stands proud of the string on the side the arrow
+  // leaves towards.
   let grip = 0;
   let n = 0;
   for (const p of points) {
@@ -359,9 +307,8 @@ const refLimb = refAxes.limb.clone().applyQuaternion(refInv);
 const refAim = refAxes.aim.clone().applyQuaternion(refInv);
 const refNormal = refAxes.normal.clone().applyQuaternion(refInv);
 
-// Her aim should come out along the way she is shooting. If it does not, the
-// rule above has been fooled by a differently built prop, and the grip it
-// would produce is a bow facing backwards — fail rather than ship that.
+// The reference aim must come out along her shooting direction. If not, the
+// rule above was fooled by the prop's shape and the bow would face backwards.
 const facing = new THREE.Vector3(0, 0, 1).applyQuaternion(erika.scene.getWorldQuaternion(new THREE.Quaternion()));
 const agrees = refAxes.aim.dot(facing);
 if (agrees <= 0) {
@@ -404,8 +351,7 @@ const scale = (GRIP.lengthOfHeight * size.y) / propAxes.length;
 
 bow.quaternion.copy(rotation);
 bow.scale.setScalar(scale);
-// Place the prop by its centre, where hers is, not by its origin — a prop's
-// origin is not its handle, and this one's is off to one side.
+// Place the prop by its centre, not its origin, which is off to one side.
 bow.position
   .copy(refMid.multiplyScalar(bone))
   .sub(propAxes.mid.clone().multiplyScalar(scale).applyQuaternion(rotation));
@@ -430,7 +376,7 @@ window.__report = report;
 window.__done = true;
 </script>`;
 
-/** Static server over the repo, so the page can fetch three, the glb and the FBX. */
+/** Static server over the repo so the page can fetch three, the glb and the FBX. */
 const server = createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
   if (path === "/") {
@@ -464,7 +410,7 @@ await page.waitForFunction(() => window.__done === true, null, { timeout: 0 });
 const report = await page.evaluate(() => window.__report);
 const total = await page.evaluate(() => window.__glb.length);
 
-// Base64 slices of 3 MiB: a multiple of 3, so no padding lands mid-stream.
+// 3 MiB slices: a multiple of 3, so no base64 padding lands mid-stream.
 const CHUNK = 3 << 20;
 const parts = [];
 for (let off = 0; off < total; off += CHUNK) {

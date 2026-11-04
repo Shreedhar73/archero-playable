@@ -31,9 +31,10 @@ import { ObstacleViews } from "./obstacles.ts";
 export interface WorldAssets {
   /** The player. Its own model since the chibi hero landed. */
   hero: GLTF;
-  /** The enemy archers, who still clone Erika. */
-  archer: GLTF;
-  enemy: GLTF;
+  /** The ranged enemies: KayKit's Skeleton Rogue, crossbow in hand. */
+  rogue: GLTF;
+  /** The melee enemies: the same pack's Skeleton Warrior and its blade. */
+  warrior: GLTF;
   arrow: GLTF;
   scenery: SceneryAssets;
 }
@@ -294,7 +295,7 @@ export class WorldScene {
     this.impacts = new Impacts(8);
     this.scene.add(this.impacts.root);
 
-    this.enemies = new EnemyViews(assets.enemy, assets.archer);
+    this.enemies = new EnemyViews(assets.warrior, assets.rogue);
     this.castOnly(this.enemies.root);
     this.scene.add(this.enemies.root);
   }

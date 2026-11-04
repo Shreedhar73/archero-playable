@@ -1,18 +1,10 @@
 /**
- * assets/raw/erika-final-raw.glb -> assets/archer_playable.glb
+ * assets/raw/erika-final-raw.glb -> assets/raw/archer_playable.glb
  *
- * The merge (`scripts/fbx-merge.mjs`) stays faithful to the Mixamo source;
- * every decision that serves *this* game is made here, so the raw file remains
- * something to diff against. What that means in practice:
- *
- *  - Mixamo clip names become the four the renderers ask for by name.
- *  - The run clip travels 375 units per cycle because Mixamo's In Place box
- *    was not ticked; code owns position, so the travel is removed here.
- *  - The source is in centimetres and the game is in metres.
- *  - Textures are 2048² PNG, which is most of the 46 MB.
- *
- * The player and the enemy archers share this one file — `src/three/enemy.ts`
- * clones it and tints it — so anything dropped here is dropped for both.
+ * fbx-merge.mjs keeps the raw file faithful to the source; game-specific
+ * decisions happen here: clip names, root motion stripped, centimetres to
+ * metres, textures down from 2048 PNG. The output is the bow reference for
+ * archero-merge.mjs and does not ship.
  *
  *   node scripts/build-archer.mjs
  */
@@ -44,9 +36,9 @@ import {
 } from "./glb-passes.mjs";
 
 const SRC = fileURLToPath(new URL("../assets/raw/erika-final-raw.glb", import.meta.url));
-const DST = fileURLToPath(new URL("../assets/archer_playable.glb", import.meta.url));
+const DST = fileURLToPath(new URL("../assets/raw/archer_playable.glb", import.meta.url));
 
-/** What the renderers call `action(mixer, gltf, name)` with. */
+/** Clip names the renderers ask for. */
 const RENAME = {
   "Standing Idle": "Idle",
   Running: "Run",
@@ -57,11 +49,7 @@ const RENAME = {
 /** Clips that must not move the character: code owns x and z. */
 const IN_PLACE = ["Run"];
 
-/**
- * Metres, head to heel. `src/main.ts` floats the health bar at 1.83 for the
- * archer, and the enemy scales in `src/config.ts` are tuned against that, so
- * this number is load-bearing rather than cosmetic.
- */
+/** Metres, head to heel. Health bar heights and enemy scales depend on it. */
 const ARCHER_HEIGHT_M = 1.83;
 
 await MeshoptEncoder.ready;
@@ -83,10 +71,8 @@ function renameClips(doc) {
 }
 
 /**
- * Mixamo's In Place option rewrites the hips translation; without it the clip
- * walks the character off its own origin and the game's position fights it.
- * Holding every key at the first frame's x and z does the same thing, and
- * keeps the vertical bob, which In Place also keeps.
+ * The clips were exported without Mixamo's In Place option, so the run walks
+ * the character off its origin. Hold hips x and z at the first key; keep the bob.
  */
 function stripRootMotion(doc) {
   const stripped = [];
@@ -111,10 +97,8 @@ function stripRootMotion(doc) {
 }
 
 /**
- * FBXLoader parks the raw FBX transform of every bone in `userData`, and
- * GLTFExporter writes `userData` straight into `extras` — pre-rotations, euler
- * orders, parent matrices, all of it, for 70 joints. Nothing reads it and it
- * was 64 KB of the JSON chunk, which is more than the textures.
+ * GLTFExporter writes three's `userData` into `extras`: FBXLoader's raw bone
+ * transforms for 70 joints, about 64 KB of JSON nothing reads.
  */
 function dropExtras(doc) {
   let dropped = 0;
@@ -139,10 +123,8 @@ function modelHeight(doc) {
 }
 
 /**
- * One node above everything, carrying only the unit conversion. The renderers
- * set position and rotation.y on `gltf.scene`, so the scale cannot live there
- * — it would be overwritten — and baking it into the vertices would also have
- * to rewrite every hips translation key.
+ * One wrapper node carrying the unit conversion. Renderers overwrite the
+ * transform of `gltf.scene`, so the scale cannot live there.
  */
 function addGameScale(doc, scale) {
   const scene = doc.getRoot().getDefaultScene();
@@ -169,17 +151,14 @@ const scale = ARCHER_HEIGHT_M / height;
 addGameScale(doc, scale);
 
 await doc.transform(
-  // prune first so later passes don't spend work on orphans.
   prune({ keepAttributes: false, keepLeaves: false }),
   dedup(),
-  // The dropped UV sets left vertices split for no reason.
   weld(),
   // Mixamo bakes a key per frame; most are interpolable.
   resample({ tolerance: 1e-4 }),
   sparse(),
   textureCompress({ encoder: sharp, targetFormat: "webp", resize: [512, 512] }),
-  // EXT_meshopt_compression quantizes as part of its own work, so it stands in
-  // for a separate quantize() pass. See the note in optimize-assets.mjs.
+  // meshopt quantizes on its own, so no separate quantize() pass.
   meshopt({ encoder: MeshoptEncoder, level: "high" }),
 );
 

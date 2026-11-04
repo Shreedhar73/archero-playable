@@ -69,10 +69,16 @@ re-layouts (`engine/resize.ts`), never restarts.
 ## Assets
 
 Every asset here was sourced by research, not handed over. The player is a
-chibi hero model off Sketchfab; the enemy archers are **Erika Archer** from
-Mixamo; all four clips both characters use — Idle, Run, Shoot, Death — come
-from the Mixamo library at <https://www.mixamo.com>, which is also the rig
-convention the whole character pipeline is written against. The props, the bow
+chibi hero model off Sketchfab, with its four clips — Idle, Run, Shoot,
+Death — from the Mixamo library at <https://www.mixamo.com>, which is also the
+rig convention the hero pipeline is written against. Both enemies are from
+**KayKit's Skeletons character pack** (CC0, Kay Lousberg,
+<https://kaylousberg.itch.io/kaykit-skeletons>): the Rogue with the pack's
+crossbow for the ranged enemy and the Warrior with its blade for melee, each
+shipping four of its 95 embedded clips and the pack's palette atlas at 128².
+They replaced Mixamo's Erika Archer and three.js's RobotExpressive, neither of
+which was in the game's style; Erika stays under `assets/raw/` because the
+hero's bow grip is measured off her. The props, the bow
 and the arrow come from a ripped Archero mesh set found on GitHub; the one
 prop that set does not contain is a conifer, so `low_poly_pine.glb` was
 downloaded separately and the set's canopy blob stayed in the scene as the
@@ -95,7 +101,8 @@ because the Mixamo downloads are tens of megabytes each.
 
 ```sh
 npm run convert       # assets/raw/*.fbx -> intermediate glbs (headless Chromium)
-npm run archer        # merge the clips into assets/archer_playable.glb
+npm run archer        # merge the clips into assets/raw/archer_playable.glb (the hero's bow reference)
+npm run skeletons     # KayKit raws -> assets/skeleton_rogue.glb, assets/skeleton_warrior.glb
 npm run archero       # hero model + clips + bow -> assets/archero_hero.glb
 npm run archero:view  # contact sheet of the hero's clips, any camera angle
 npm run assets        # rebuild the other assets/*.glb from assets/raw/
