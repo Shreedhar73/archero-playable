@@ -10,49 +10,23 @@ export const STORE_URLS = {
 export const PLAYER_SPEED = 5; // units per second
 
 /**
- * Ground covered between footsteps. Measured off the real game: one thud
- * every 0.30 s for the whole of a 12-second run at full speed, 80% of the
- * intervals within 0.26–0.34 — and a dust puff on every one of them.
- * Expressed as distance so that a slower stick means fewer steps and a body
- * held against a wall means none: the step is read off where the player
- * *went*, not off the stick. The ear (`audio/cues.ts`) and the eye
- * (`three/dust.ts`) count the same metres.
+ * Ground covered between footsteps: one every 0.30 s at full speed in the
+ * real game. A distance, not a time, so a body held against a wall takes
+ * none. Shared by the footstep sound and the dust.
  */
 export const STEP_LENGTH = PLAYER_SPEED * 0.3;
 
-/**
- * How fast the player's velocity closes on what the stick is asking for, per
- * second. Braking is faster than accelerating.
- *
- * The real game's player leans into a turn and settles out of it instead of
- * changing direction on one frame, and that easing is a good part of what
- * the recording reads as smooth. Short enough that nobody can feel a delay
- * between the thumb and the body: at 18, 0.15 s covers 93% of the change.
- */
+/** How fast velocity closes on the stick, per second. Braking is faster. */
 export const PLAYER_ACCEL = 18;
 export const PLAYER_BRAKE = 26;
 
-/**
- * Room footprint. Taller than wide, as in the reference.
- *
- * 16, derived rather than chosen — see `src/three/camera.ts`. The arena
- * covers 96% of a portrait screen's width and 59% of its height in the
- * recording, which at 9 units wide makes the foreshortened depth 12.0 units
- * of screen; at the measured 48.5-degree elevation that is a room 16 deep.
- * The fight ground in the real game reads longer than ours did, and the
- * measurement agrees: by a third.
- */
+/** Room footprint. Depth follows from the camera angle; see `three/camera.ts`. */
 export const ROOM_WIDTH = 9;
 export const ROOM_DEPTH = 16;
 
 export const PLAYER_RADIUS = 0.3; // units, for collision detection
 
-/**
- * Which enemy each spawn is, in order. Two melee and four archers, spread so
- * the player never faces a melee pair back to back — a literal [melee, melee,
- * archer, archer, archer, archer] would make the first half of the level a
- * different game from the second.
- */
+/** Enemy kind per spawn, in order. Melee spread out so no pair comes back to back. */
 export const ENEMY_KINDS = [
   "melee",
   "archer",
@@ -65,71 +39,44 @@ export const ENEMY_KINDS = [
   "archer",
 ] as const;
 
-/**
- * Pool size, and the length of a level: both are "how many enemies exist",
- * so both come from ENEMY_KINDS rather than being repeated. Adding a kind to
- * that list is the only edit needed to make a level longer.
- */
+/** Pool size and level length. Add to ENEMY_KINDS to make a level longer. */
 export const ENEMY_COUNT = ENEMY_KINDS.length;
 
-/**
- * How big the melee skeleton is drawn. Visual only. KayKit's Warrior stands
- * 2.591 in its file, horns included; at 0.6 that is 1.55 on the floor, a
- * head under the hero, which is the relation the real game's melee keep.
- */
+/** Visual only. The Warrior is 2.591 tall in its file. */
 export const ENEMY_SCALE = 0.6;
 
-/**
- * How big the player's model is drawn. Visual only — `PLAYER_RADIUS` is what
- * the simulation collides with, and it does not move.
- *
- * Measured against the recording: their hero is about 9.6% of the arena's
- * width on screen and ours was 6.9%, which is why our room read as empty.
- * This is the cheaper half of the fix — the other half would be a narrower
- * room, and the room was just asked to get longer.
- *
- * 1.15, not the 1.35 this started at: that was set under a 78-degree camera
- * which flattened everything, and at the measured 48.5 the same model shows
- * its full height.
- */
+/** Visual only. `PLAYER_RADIUS` is what collides. */
 export const PLAYER_SCALE = 0.95;
 
-/** Emeny  speed */
-export const ENEMY_SPEED = 1.6;
+export const ENEMY_SPEED = 2.6;
 
-/** Enemy radium. Help to stop enemy before as soon as it touches player */
+/** Collision radius; stops an enemy as it touches the player. */
 export const ENEMY_RADIUS = 0.35;
 
 /** Seconds between enemy spawns */
 export const SPAWN_INTERVAL = 1;
 
-/** Pathfinding grid resolution. Half a unit is finer than a body (0.7 across),
- *  so a lane a body fits through is never closed by rounding, and 18x24 cells
- *  is small enough to flood in well under a millisecond. */
+/** Pathfinding cell size. Finer than a body, so rounding never closes a lane. */
 export const CELL_SIZE = 0.5;
 
-/** Player health. A single number so the HUD can draw one bar. */
 export const PLAYER_HP = 100;
 
-/** Enemy health: three arrows at ARROW_DAMAGE, so a kill is quick but not
- *  instant — long enough for the hit reaction to read. */
+/** Three arrows at ARROW_DAMAGE. */
 export const ENEMY_HP = 30;
 
-export const ENEMY_DAMAGE = 3;
+export const ENEMY_DAMAGE = 5;
 
-/** Seconds between melee swings, so standing in a crowd is lethal but not
- *  instantly so. */
-export const ENEMY_ATTACK_INTERVAL = 1.4;
+/** Seconds between melee swings. */
+export const ENEMY_ATTACK_INTERVAL = 0.75;
 
-/** Seconds the Death clip plays before the pool slot is handed back. The clip
- *  itself is longer; this is how much of it is worth watching. */
+/** Seconds the Death clip plays before the pool slot is handed back. */
 export const ENEMY_DEATH_TIME = 1.1;
 
 export const ARROW_SPEED = 11;
 export const ARROW_DAMAGE = 15;
 export const ARROW_RADIUS = 0.12;
 
-/** Seconds before an arrow despawns, in case it somehow misses everything. */
+/** Seconds before an arrow despawns if it misses everything. */
 export const ARROW_LIFE = 2;
 
 /** Arrows in flight at once. Fire rate times life plus headroom. */
@@ -138,82 +85,41 @@ export const PROJECTILE_COUNT = 24;
 export const FIRE_INTERVAL = 0.8;
 export const FIRE_RANGE = 5;
 
-/**
- * Seconds the draw-and-recoil pose holds after a shot. Shorter than the clip
- * itself (0.7 s) so the archer settles back to idle between arrows instead of
- * being permanently mid-recoil at FIRE_INTERVAL.
- */
+/** Seconds the shoot pose holds. Shorter than the clip so the archer settles between arrows. */
 export const SHOOT_POSE = FIRE_INTERVAL * 1.15;
 
 export const POINTS_PER_KILL = 10;
 export const ENEMIES_TO_KILL = ENEMY_COUNT;
 
-/** Derived, so the two can never drift apart. */
 export const POINTS_TARGET = ENEMIES_TO_KILL * POINTS_PER_KILL;
 
-/** How far in front of the archer an arrow appears. Inside the body it reads
- *  as the arrow materialising out of the chest. */
+/** How far in front of the archer an arrow appears, so it leaves the bow and not the chest. */
 export const ARROW_SPAWN_OFFSET = 0.45;
 
-/**
- * Seconds the tutorial waits before starting the game on its own.
- *
- * The brief says the stage ends on first input, and it does — this is the
- * floor under that. A player who never taps would otherwise watch a hand
- * trace a figure-8 for the whole ad, which is the one outcome worth ruling
- * out: no gameplay seen, no CTA reached.
- */
+/** Seconds before the tutorial starts the game on its own if nobody taps. */
 export const TUTORIAL_TIMEOUT = 3;
 
-/**
- * The distance an archer enemy tries to hold.
- *
- * Deliberately INSIDE the player's FIRE_RANGE of 5. An archer that outranges
- * the player reads better on paper — advance into danger to answer it — but
- * the simulation showed what it actually does: a player who stands still can
- * never reach them, the level never ends, and the ad never reaches its CTA.
- * Measured at 5.6, four seeds all stalled at 3-4 kills of 6.
- *
- * An ad has to be winnable by someone who barely plays. The kinds stay
- * different because of how they move, not because of who outranges whom.
- */
+/** Distance an archer holds. Must stay inside FIRE_RANGE or a standing player can never reach it. */
 export const ENEMY_SHOOT_RANGE = 4.4;
 
-export const ENEMY_SHOT_INTERVAL = 2.5;
-export const ENEMY_ARROW_SPEED = 7;
-export const ENEMY_ARROW_DAMAGE = 5;
+export const ENEMY_SHOT_INTERVAL = 0.75;
+export const ENEMY_ARROW_SPEED = 10;
+export const ENEMY_ARROW_DAMAGE = 2;
 
-/**
- * How far inside its firing range an archer tolerates the player before
- * backing off, as a fraction of ENEMY_SHOOT_RANGE. A band rather than a
- * single distance: an exact target makes the enemy jitter across it every
- * frame, stepping forward and back forever.
- */
+/** Fraction of ENEMY_SHOOT_RANGE an archer tolerates before backing off. A band, or it jitters. */
 export const ENEMY_KITE_BAND = 0.78;
 
-/** Retreating is slower than advancing — walking backwards always is, and it
- *  gives the player a way to close the gap. */
+/** Retreat speed factor, so the player can close the gap. */
 export const ENEMY_BACKPEDAL = 0.8;
 
-/**
- * How big the ranged skeleton is drawn. KayKit's Rogue stands 2.308 in its
- * file; at 0.72 it is the 1.66 Erika stood at, so nothing placed against
- * the old height moved. No tint any more: the two kinds are different
- * bodies with different weapons, which is what the tint was standing in for.
- */
-export const ENEMY_ARCHER_SCALE = 0.72;
+/** Visual only. The Rogue is 2.308 tall in its file. */
+export const ENEMY_ARCHER_SCALE = 0.52;
 
 /**
- * Rest-pose height of each model as it ships, straight off
- * `scripts/check-assets.mjs`: the hero 1.830, the Rogue 2.308, the Warrior
- * 2.591 (KayKit's skeletons, horns and T-pose arms included).
- * Times the scale it is drawn at, that is where its head is — and a floating
- * bar is placed *and* sized from it, so changing a scale carries the bar with
- * the body instead of leaving it behind at the height the old scale had.
- *
- * Declared here, below the scales, rather than beside them: a `const` read by
- * an initializer above its own declaration is a temporal-dead-zone throw, not
- * a hoist.
+ * Rest-pose height of each model (`scripts/check-assets.mjs`) times its
+ * draw scale. Floating bars are placed and sized from these, so a scale
+ * edit carries the bar with the body. Declared after the scales: a const
+ * read before its declaration throws.
  */
 export const PLAYER_HEIGHT = 1.83 * PLAYER_SCALE;
 export const ENEMY_HEIGHTS: Record<(typeof ENEMY_KINDS)[number], number> = {
