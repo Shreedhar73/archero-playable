@@ -2,25 +2,12 @@ import { Circle, Container, Graphics } from "pixi.js";
 
 const SIZE = 36;
 const MARGIN = 16;
-/** Vertical centre: level with the HUD's progress bar, which is 26 px tall at
- *  the same margin. Top-left corner, asked for — the bar is centred and at
- *  least 74 px of clear screen is left of it at the narrowest viewport, so
- *  the two never meet. */
+/** Level with the HUD's progress bar, 26 px tall at the same margin. */
 const CENTRE_Y = MARGIN + 13;
 
 /**
- * Mute toggle.
- *
- * Its own widget rather than part of `Hud`, because the HUD is handed numbers
- * and draws them — it has no handlers and nothing it owns can be tapped.
- * This has exactly one job and one event.
- *
- * Networks expect sound to be mutable and expect nothing to play before the
- * first tap. The tutorial's first-input gesture covers the second; this is
- * the first. The state is not persisted: the Google build forbids
- * localStorage, and muting is a per-impression choice anyway.
- *
- * Top-left, where the user asked for it; the points counter has the right.
+ * Mute toggle, top-left. Networks expect sound to be mutable from the first
+ * frame. State is not persisted: the Google build forbids localStorage.
  */
 export class MuteButton extends Container {
   private readonly face = new Graphics();
@@ -36,8 +23,7 @@ export class MuteButton extends Container {
 
     this.eventMode = "static";
     this.cursor = "pointer";
-    // A drawn shape is a poor tap target on a phone: the hit area is a circle
-    // wider than the button, which is what a thumb actually lands on.
+    // Hit area wider than the drawn button, for thumbs.
     this.hitArea = new Circle(0, 0, SIZE / 2 + 6);
     this.on("pointertap", () => {
       this.muted = !this.muted;
@@ -48,8 +34,7 @@ export class MuteButton extends Container {
     this.draw();
   }
 
-  /** Called from onResize only. Scaled with the rest of the HUD so rotating
-   *  moves it without resizing it. */
+  /** Called from onResize only. Scaled with the rest of the HUD. */
   layout(_w: number, _h: number, scale: number): void {
     this.scale.set(scale);
     this.position.set((MARGIN + SIZE / 2) * scale, CENTRE_Y * scale);
@@ -63,8 +48,7 @@ export class MuteButton extends Container {
       .circle(0, 0, SIZE / 2)
       .stroke({ color: 0xffffff, alpha: 0.35, width: 1.5 });
 
-    // Drawn, not typed: an icon font is bytes the cap cannot spare and an
-    // emoji renders differently on every platform.
+    // Drawn, not typed: an icon font costs bytes and an emoji differs per platform.
     const glyph = this.glyph
       .clear()
       .poly([-9, -3.5, -4.5, -3.5, 0.5, -8.5, 0.5, 8.5, -4.5, 3.5, -9, 3.5])
@@ -81,8 +65,7 @@ export class MuteButton extends Container {
       return;
     }
 
-    // Two bars rather than arcs: an arc continues the path the cone left
-    // open and draws a stray line across the button to reach its start.
+    // Bars, not arcs: an arc would continue the open path and draw a stray line.
     glyph
       .roundRect(4.5, -3, 2.4, 6, 1.2)
       .roundRect(9, -6.5, 2.4, 13, 1.2)

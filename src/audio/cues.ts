@@ -13,9 +13,20 @@
  * the same rise, which is why the two can never disagree about when a shot
  * happened.
  */
+import { PLAYER_SPEED } from "../config.ts";
 import type { Enemy } from "../game/enemy.ts";
 import type { Player } from "../game/player.ts";
 import type { GameState } from "../game/state.ts";
+
+/**
+ * Seconds between footsteps at full run, measured off the real game: one
+ * thud every 0.30 s for the whole of a 12-second run, 80% of the intervals
+ * within 0.26–0.34. Expressed as distance so that a slower stick means fewer
+ * steps and a body held against a wall means none — the step is read off
+ * where the player *went*, not off the stick.
+ */
+export const STEP_INTERVAL = 0.3;
+export const STEP_LENGTH = PLAYER_SPEED * STEP_INTERVAL;
 
 export interface Cues {
   /** The player released an arrow. */
@@ -29,6 +40,8 @@ export interface Cues {
   deaths: number;
   /** The player lost health, to an arrow or a fist. */
   hurt: boolean;
+  /** Footsteps this frame: 0 or 1 at any sane frame rate, counted anyway. */
+  steps: number;
   win: boolean;
   lose: boolean;
 }
@@ -51,6 +64,11 @@ export interface CueWatcher {
   readonly alive: Uint8Array;
   shooting: number;
   hp: number;
+  /** Where the player stood last frame, and distance walked since the last
+   *  step. A step every STEP_LENGTH of travel. */
+  x: number;
+  z: number;
+  travelled: number;
   ended: boolean;
   /** False until the first read has recorded a baseline. Without it every
    *  starting value reads as a change and the ad opens on a burst of noise. */
@@ -65,6 +83,9 @@ export function createCueWatcher(count: number): CueWatcher {
     alive: new Uint8Array(count),
     shooting: 0,
     hp: 0,
+    x: 0,
+    z: 0,
+    travelled: 0,
     ended: false,
     primed: false,
   };
@@ -77,6 +98,7 @@ const cues: Cues = {
   impacts: 0,
   deaths: 0,
   hurt: false,
+  steps: 0,
   win: false,
   lose: false,
 };
@@ -96,6 +118,22 @@ export function readCues(
   cues.enemyShots = 0;
   cues.impacts = 0;
   cues.deaths = 0;
+  cues.steps = 0;
+
+  // Distance, not velocity: `clampToRoom` stops the body at the edge while
+  // the stick is still held, and a body that is not going anywhere makes no
+  // sound. Only during play — the end card freezes the player in place, and
+  // a watcher primed before the first frame would otherwise read the spawn
+  // position as a walk.
+  if (watcher.primed && state.stage === "gameplay") {
+    watcher.travelled += Math.hypot(player.x - watcher.x, player.z - watcher.z);
+    while (watcher.travelled >= STEP_LENGTH) {
+      watcher.travelled -= STEP_LENGTH;
+      cues.steps++;
+    }
+  }
+  watcher.x = player.x;
+  watcher.z = player.z;
 
   watcher.shooting = player.shooting;
   watcher.hp = player.hp;

@@ -35,7 +35,7 @@ import { createPlayer, movePlayer } from "../src/game/player.ts";
 import { createProjectiles, updateProjectiles } from "../src/game/projectiles.ts";
 import { createSpawner, updateSpawner } from "../src/game/spawner.ts";
 import { nearestVisibleEnemy } from "../src/game/targeting.ts";
-import { createCueWatcher, readCues } from "../src/audio/cues.ts";
+import { STEP_LENGTH, createCueWatcher, readCues } from "../src/audio/cues.ts";
 import { readFileSync } from "node:fs";
 import { addKills, createState } from "../src/game/state.ts";
 
@@ -160,6 +160,11 @@ function run(seed: number, moving: boolean, cover = false): void {
   let impactCues = 0;
   let deathCues = 0;
   let hurtCues = 0;
+  let stepCues = 0;
+  // The player's own path length, from positions — the witness for steps.
+  let walked = 0;
+  let lastX = player.x;
+  let lastZ = player.z;
   // Counted independently, by watching the pool fill rather than by
   // asking the thing under test.
   let arrowsFired = 0;
@@ -196,8 +201,12 @@ function run(seed: number, moving: boolean, cover = false): void {
 
     if (state.stage === "end" && finishedAt === 0) finishedAt = frame / 60;
 
+    if (state.stage === "gameplay") walked += Math.hypot(player.x - lastX, player.z - lastZ);
+    lastX = player.x;
+    lastZ = player.z;
     const cues = readCues(cueWatcher, player, enemies, state);
     if (cues.shot) shotCues++;
+    stepCues += cues.steps;
     enemyShotCues += cues.enemyShots;
     impactCues += cues.impacts;
     deathCues += cues.deaths;
@@ -325,7 +334,8 @@ function run(seed: number, moving: boolean, cover = false): void {
   );
   console.log(
     `    cues: ${shotCues} shots, ${enemyShotCues} enemy shots, ` +
-      `${impactCues} impacts, ${deathCues} deaths, ${hurtCues} hits taken`,
+      `${impactCues} impacts, ${deathCues} deaths, ${hurtCues} hits taken, ` +
+      `${stepCues} steps over ${walked.toFixed(1)} units`,
   );
   console.log(
     `    sliding: ${slideFrames} of ${movedFrames} walking frames ` +
@@ -363,6 +373,16 @@ function run(seed: number, moving: boolean, cover = false): void {
     enemyShotCues === hostileFired,
     `${label}: ${enemyShotCues} enemy shot cues for ${hostileFired} enemy arrows`,
   );
+  // One footstep per STEP_LENGTH of ground actually covered, read off the
+  // same positions this harness walks the player through. Not off the stick:
+  // the still runs hold it at zero and must hear nothing, and a moving run
+  // pushed into a wall covers less ground than it asks for.
+  const expectedSteps = Math.floor(walked / STEP_LENGTH);
+  check(
+    Math.abs(stepCues - expectedSteps) <= 1,
+    `${label}: ${stepCues} step cues for ${walked.toFixed(1)} units walked (expected ${expectedSteps})`,
+  );
+  if (!moving) check(stepCues === 0, `${label}: ${stepCues} steps while standing still`);
   // An arrow can miss: into a crate, or out of life. It cannot land twice.
   check(
     impactCues <= arrowsFired,
@@ -383,6 +403,7 @@ function run(seed: number, moving: boolean, cover = false): void {
       fresh.impacts === 0 &&
       fresh.deaths === 0 &&
       !fresh.hurt &&
+      fresh.steps === 0 &&
       !fresh.win &&
       !fresh.lose,
     `${label}: a fresh cue watcher fired on its first read`,

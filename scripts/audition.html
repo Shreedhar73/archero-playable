@@ -7,69 +7,91 @@
   <style>
     body { font: 15px/1.4 system-ui, sans-serif; margin: 0; padding: 24px; background: #15190f; color: #e8ecd8; }
     h1 { font-size: 18px; margin: 0 0 4px; }
-    p { margin: 0 0 16px; color: #aab39a; max-width: 52ch; }
-    section { margin-bottom: 20px; }
+    h2 { font-size: 14px; margin: 18px 0 6px; color: #c9d4ad; }
+    p { margin: 0 0 12px; color: #aab39a; max-width: 56ch; }
     button { font: inherit; padding: 10px 16px; margin: 0 8px 8px 0; border: 1px solid #5a6b3a; border-radius: 8px; background: #26301a; color: inherit; cursor: pointer; }
     button:active, button[aria-pressed="true"] { background: #4e6b2a; }
     code { color: #d7e3b5; }
-    #log { font: 12px/1.5 ui-monospace, monospace; color: #8a9478; white-space: pre-wrap; }
+    #log { font: 12px/1.5 ui-monospace, monospace; color: #8a9478; white-space: pre-wrap; margin-top: 16px; }
   </style>
 </head>
 <body>
   <h1>Sound audition</h1>
   <p>
-    Dev only: not in the build. The first tap unlocks the context exactly as
-    the game's first touch does. Every button goes through
-    <code>GameAudio</code>, so what plays here is what plays in the ad, cadence
-    gate included. Knobs: <code>MASTER</code> and each entry of
-    <code>SFX</code> in <code>src/audio/audio.ts</code>.
+    Dev only: not in the build. The first tap unlocks the context and starts the
+    bed, exactly as the game's first touch does. Everything in the first two
+    sections goes through <code>GameAudio</code>, so what plays here is what
+    plays in the ad, cadence gate included. Knobs in
+    <code>src/audio/audio.ts</code>: <code>MASTER</code>, <code>MUSIC</code>,
+    <code>STEP_GAIN</code>, each entry of <code>SFX</code>, and the
+    <code>LEAD</code> / <code>BASS_*</code> tables.
   </p>
 
-  <section>
-    <button id="unlock">Unlock</button>
-    <button id="mute" aria-pressed="false">Mute</button>
-  </section>
+  <h2>Layers</h2>
+  <p>The bed and the footsteps were built from measurements of the real game's
+    recording; each has its own switch so it can be judged with and without
+    the rest.</p>
+  <button id="unlock">Unlock</button>
+  <button id="bed" aria-pressed="true">Bed</button>
+  <button id="stepsloop" aria-pressed="false">Footsteps (running, 0.30 s)</button>
+  <button id="mute" aria-pressed="false">Mute</button>
 
+  <h2>Effects, one at a time</h2>
   <section id="sfx"></section>
 
-  <section>
-    <p>The game ships no background music: two synthesized beds were heard here
-      and rejected. This is the AR scanner creative's own tune, at its own
-      levels (0.11 under a 0.8 master), on a context of its own — it is not in
-      the game. Run it under the combat loop to judge whether any bed belongs.</p>
-    <button id="tune" aria-pressed="false">Reference tune (AR creative)</button>
-  </section>
+  <h2>Twenty seconds of play</h2>
+  <p>Alternates two seconds of running (footsteps, no shooting; the hero only
+    shoots standing still) with two seconds of standing (a bow every 0.8 s,
+    most arrows landing, a kill every other stand), over the bed. Judge the
+    density, not any one sound.</p>
+  <button id="combat" aria-pressed="false">Play loop</button>
 
-  <section>
-    <p>Twenty seconds of combat: a bow every 0.8 s, most arrows landing, a kill
-      every 2.5 s, a hit taken every 6 s. The density is what
-      the earlier versions were rejected for, not any one sound.</p>
-    <button id="combat" aria-pressed="false">Combat loop</button>
-  </section>
+  <h2>Measured effects, not in the game</h2>
+  <p>The shot, hit and death as the recording measures them, on a context of
+    their own, so the game's versions can be compared by ear before anything
+    is swapped. Shot: 620 Hz for 15 ms then a 300 to
+    570 Hz rise, 100 ms, peak −10.6 dBFS. Hit: a 9 kHz ring, −20 dB after
+    130 to 350 ms, peak −8.4. Death: a low thump to −20 dB in 200 ms with a
+    5 to 7 kHz sparkle after it.</p>
+  <button id="mshot">shot (measured)</button>
+  <button id="mhit">hit (measured)</button>
+  <button id="mdeath">death (measured)</button>
 
   <div id="log"></div>
 
   <script type="module">
     import { GameAudio, SFX_NAMES } from "/src/audio/audio.ts";
-    import { midi, noise, tone } from "/src/audio/synth.ts";
+    import { noise, tone } from "/src/audio/synth.ts";
 
     const audio = new GameAudio(9);
     const log = document.getElementById("log");
     const say = (s) => { log.textContent = `${new Date().toLocaleTimeString()}  ${s}\n` + log.textContent; };
+    const pressed = (el, on) => el.setAttribute("aria-pressed", String(on));
 
-    document.getElementById("unlock").addEventListener("pointerdown", () => {
+    document.getElementById("unlock").addEventListener("pointerdown", () => { audio.unlock(); say("unlock()"); });
+
+    const bed = document.getElementById("bed");
+    let bedOn = true;
+    bed.addEventListener("pointerdown", () => {
       audio.unlock();
-      say("unlock()");
+      bedOn = !bedOn; pressed(bed, bedOn); audio.setMusic(bedOn); say(`bed ${bedOn ? "on" : "off"}`);
     });
 
     const mute = document.getElementById("mute");
     let muted = false;
     mute.addEventListener("click", () => {
-      muted = !muted;
-      mute.setAttribute("aria-pressed", String(muted));
-      audio.setMuted(muted);
+      muted = !muted; pressed(mute, muted); audio.setMuted(muted);
       if (!muted) audio.tap();
       say(`setMuted(${muted})`);
+    });
+
+    const stepsLoop = document.getElementById("stepsloop");
+    let stepsTimer = null;
+    stepsLoop.addEventListener("pointerdown", () => {
+      audio.unlock();
+      if (stepsTimer !== null) { clearInterval(stepsTimer); stepsTimer = null; pressed(stepsLoop, false); say("footsteps off"); return; }
+      stepsTimer = setInterval(() => audio.preview("step"), 300);
+      pressed(stepsLoop, true); say("footsteps on");
     });
 
     const sfx = document.getElementById("sfx");
@@ -77,85 +99,65 @@
       const b = document.createElement("button");
       b.textContent = name;
       // pointerdown, not click: the first one doubles as the unlock gesture.
-      b.addEventListener("pointerdown", () => {
-        audio.unlock();
-        audio.preview(name);
-        say(name);
-      });
+      b.addEventListener("pointerdown", () => { audio.unlock(); audio.preview(name); say(name); });
       sfx.appendChild(b);
     }
 
-    // The AR creative's four-bar loop, note for note, on its own context so
-    // the game's bus is untouched. Audition only.
-    const tuneButton = document.getElementById("tune");
-    let tuneCtx = null;
-    let tuneTimer = null;
-    tuneButton.addEventListener("pointerdown", () => {
-      if (tuneTimer !== null) {
-        clearInterval(tuneTimer); tuneTimer = null;
-        void tuneCtx.suspend();
-        tuneButton.setAttribute("aria-pressed", "false");
-        say("reference tune off");
-        return;
-      }
-      if (tuneCtx === null) {
-        tuneCtx = new AudioContext();
-        const master = tuneCtx.createGain(); master.gain.value = 0.8;
-        master.connect(tuneCtx.createDynamicsCompressor()).connect(tuneCtx.destination);
-        const music = tuneCtx.createGain(); music.gain.value = 0.11; music.connect(master);
-        tuneCtx.__voice = { ctx: tuneCtx, out: music };
-      }
-      void tuneCtx.resume();
-      const v = tuneCtx.__voice;
-      const step = 60 / 112 / 2;
-      const lead = [76, 0, 79, 0, 81, 79, 76, 0, 74, 0, 76, 0, 72, 0, 0, 0, 76, 0, 79, 0, 84, 81, 79, 0, 81, 79, 76, 74, 72, 0, 0, 0];
-      const bass = [48, 0, 0, 0, 55, 0, 0, 0, 45, 0, 0, 0, 52, 0, 0, 0, 41, 0, 0, 0, 48, 0, 0, 0, 43, 0, 0, 0, 47, 0, 43, 0];
-      let index = 0;
-      let next = v.ctx.currentTime + 0.1;
-      const schedule = () => {
-        while (next < v.ctx.currentTime + 0.2) {
-          const at = next - v.ctx.currentTime;
-          const l = lead[index % lead.length];
-          const b = bass[index % bass.length];
-          if (l) tone(v, midi(l), { at, duration: step * 0.9, gain: 0.35, type: "square", attack: 0.005 });
-          if (b) tone(v, midi(b), { at, duration: step * 3.5, gain: 0.7, type: "triangle" });
-          if (index % 2 === 1) noise(v, { at, duration: 0.03, filter: "highpass", frequency: 7000, gain: 0.25 });
-          index++;
-          next += step;
-        }
-      };
-      tuneTimer = setInterval(schedule, 50);
-      schedule();
-      tuneButton.setAttribute("aria-pressed", "true");
-      say("reference tune on");
-    });
-
+    // Two seconds running, two seconds standing, ten times.
     const combat = document.getElementById("combat");
     let timers = [];
+    const stop = () => { timers.forEach(clearTimeout); timers = []; pressed(combat, false); };
     combat.addEventListener("pointerdown", () => {
       audio.unlock();
-      if (timers.length) {
-        timers.forEach(clearInterval);
-        timers = [];
-        combat.setAttribute("aria-pressed", "false");
-        say("combat stopped");
-        return;
+      if (timers.length) { stop(); say("loop stopped"); return; }
+      pressed(combat, true); say("loop: 20 s");
+      for (let phase = 0; phase < 10; phase++) {
+        const t0 = phase * 2000;
+        if (phase % 2 === 0) {
+          for (let t = 0; t < 2000; t += 300) timers.push(setTimeout(() => audio.preview("step"), t0 + t));
+        } else {
+          for (let t = 0; t < 2000; t += 800) {
+            timers.push(setTimeout(() => audio.preview("shot"), t0 + t));
+            if (Math.random() < 0.8) timers.push(setTimeout(() => audio.preview("impact"), t0 + t + 250 + Math.random() * 150));
+          }
+          if (phase % 4 === 1) timers.push(setTimeout(() => audio.preview("death"), t0 + 1500));
+          if (phase === 5) timers.push(setTimeout(() => audio.preview("hurt"), t0 + 900));
+        }
       }
-      combat.setAttribute("aria-pressed", "true");
-      say("combat: 20 s");
-      timers.push(setInterval(() => {
-        audio.preview("shot");
-        if (Math.random() < 0.8) setTimeout(() => audio.preview("impact"), 250 + Math.random() * 150);
-      }, 800));
-      timers.push(setInterval(() => audio.preview("death"), 2500));
-      timers.push(setInterval(() => audio.preview("hurt"), 6000));
-      timers.push(setTimeout(() => {
-        timers.forEach(clearInterval);
-        timers = [];
-        combat.setAttribute("aria-pressed", "false");
-        audio.preview("win");
-        say("combat done, win");
-      }, 20000));
+      timers.push(setTimeout(() => { audio.preview("win"); stop(); say("loop done, win"); }, 20000));
+    });
+
+    // The measured effects, on their own context so the game's bus is untouched.
+    let mctx = null, mvoice = null;
+    const measured = () => {
+      if (mctx === null) {
+        mctx = new AudioContext();
+        const master = mctx.createGain(); master.gain.value = 0.8;
+        const lim = mctx.createDynamicsCompressor(); lim.threshold.value = -10;
+        master.connect(lim).connect(mctx.destination);
+        mvoice = { ctx: mctx, out: master };
+      }
+      void mctx.resume();
+      return mvoice;
+    };
+    document.getElementById("mshot").addEventListener("pointerdown", () => {
+      const v = measured();
+      tone(v, 610, { duration: 0.03, slideTo: 660, gain: 0.08, attack: 0.008, type: "sine" });
+      tone(v, 300, { at: 0.02, duration: 0.08, slideTo: 580, gain: 0.1, attack: 0.03, type: "triangle" });
+      say("shot (measured)");
+    });
+    document.getElementById("mhit").addEventListener("pointerdown", () => {
+      const v = measured();
+      tone(v, 9000, { duration: 0.22, gain: 0.1, attack: 0.02, type: "sine" });
+      noise(v, { duration: 0.025, filter: "bandpass", frequency: 8000, q: 2, gain: 0.06 });
+      say("hit (measured)");
+    });
+    document.getElementById("mdeath").addEventListener("pointerdown", () => {
+      const v = measured();
+      tone(v, 180, { duration: 0.2, slideTo: 60, gain: 0.14, type: "triangle" });
+      noise(v, { duration: 0.06, filter: "lowpass", frequency: 300, gain: 0.1 });
+      noise(v, { at: 0.06, duration: 0.25, filter: "bandpass", frequency: 6000, q: 2, gain: 0.05 });
+      say("death (measured)");
     });
   </script>
 </body>

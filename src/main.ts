@@ -127,9 +127,13 @@ async function boot(): Promise<void> {
   // white flash is drawn from. Built once; nothing here allocates per frame.
   const lastEnemyFlash = enemies.map(() => 0);
   let lastPlayerFlash = 0;
-  // Silent until the first tap unlocks it, which is also when the tutorial
-  // ends. Nothing here can touch game state — audio reads it, like a view.
+  // Nothing here can touch game state — audio reads it, like a view.
+  // Started now, not on the first tap: a game that opens with the tune and
+  // whose first arrow is heard is what the real one does. Browsers that
+  // enforce autoplay policy keep the context suspended until a gesture, and
+  // then the first tap below resumes it — the ad never depends on which.
   const audio = new GameAudio(enemies.length);
+  audio.unlock();
   const mute = new MuteButton((muted) => {
     audio.setMuted(muted);
     // Only on the way back: a click played into a mute that is already
