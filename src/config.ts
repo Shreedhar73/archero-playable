@@ -10,6 +10,17 @@ export const STORE_URLS = {
 export const PLAYER_SPEED = 5; // units per second
 
 /**
+ * Ground covered between footsteps. Measured off the real game: one thud
+ * every 0.30 s for the whole of a 12-second run at full speed, 80% of the
+ * intervals within 0.26–0.34 — and a dust puff on every one of them.
+ * Expressed as distance so that a slower stick means fewer steps and a body
+ * held against a wall means none: the step is read off where the player
+ * *went*, not off the stick. The ear (`audio/cues.ts`) and the eye
+ * (`three/dust.ts`) count the same metres.
+ */
+export const STEP_LENGTH = PLAYER_SPEED * 0.3;
+
+/**
  * How fast the player's velocity closes on what the stick is asking for, per
  * second. Braking is faster than accelerating.
  *
