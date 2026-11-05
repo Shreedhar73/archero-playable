@@ -16,8 +16,10 @@
     "assets:check": "node scripts/check-assets.mjs assets/skeleton_rogue.glb && node scripts/check-assets.mjs assets/skeleton_warrior.glb",
     "skeletons": "node scripts/build-skeletons.mjs",
     "audition": "vite --open /scripts/audition.html",
-    "build": "npm run check && npm run test && npm run build:generic",
+    "build": "npm run check && npm run build:generic && npm run build:google && npm run build:applovin",
     "build:generic": "vite build --mode generic && node scripts/package.mjs generic",
+    "build:google": "vite build --mode google && node scripts/package.mjs google",
+    "build:applovin": "vite build --mode applovin && node scripts/package.mjs applovin",
     "preview": "vite preview",
     "shot": "node scripts/shot.mjs",
     "test": "node tests/sim.ts",
@@ -38,6 +40,7 @@
     "sharp": "^0.35.5",
     "typescript": "~5.7.3",
     "vite": "^6.2.0",
-    "vite-plugin-singlefile": "^2.3.0"
+    "vite-plugin-singlefile": "^2.3.0",
+    "fflate": "^0.8.3"
   }
 }
