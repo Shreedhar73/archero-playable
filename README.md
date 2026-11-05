@@ -4,6 +4,8 @@ Playable-ad project generated from [create-playable](../create-playable).
 
 Live build: <https://shreedhar73.github.io/archero-playable/> - the generic
 single HTML file, deployed from `main` by `.github/workflows/pages.yml`.
+`vercel.json` deploys the same `main` to Vercel with every network's bundle:
+`/` rewrites to `/generic.html`; `/applovin.html` and `/google.zip` sit beside it.
 
 ## Stack
 
